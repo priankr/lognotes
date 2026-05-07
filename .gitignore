@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Environment variables
+.env
+
+# IDE settings
+.vscode/
+.idea/
+.claude/
+.pi/
+
+# Distribution / packaging
+dist/
+*.egg-info/
+# PyInstaller build intermediates (inside build/) and Inno Setup output,
+# but keep the versioned build scripts/specs themselves.
+build/build/
+build/Output/
+
+# Local development
+*.log
+*.tmp
+
+# Model cache
+.cache/
+models/
+
+# Config (user-specific)
+config.json
+
+# OS files
+.DS_Store
+Thumbs.db
