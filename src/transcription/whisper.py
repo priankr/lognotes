@@ -28,6 +28,14 @@ class WhisperTranscriber:
             self.compute_type = compute_type
         self._model: Optional[WhisperModel] = None
 
+    def load(self) -> None:
+        """Eagerly load the underlying WhisperModel into memory.
+
+        Called during app startup so the first real transcription doesn't pay
+        the model-load cost. Safe to call multiple times — no-ops if already loaded.
+        """
+        self._load_model()
+
     def _load_model(self) -> None:
         if self._model is None:
             import logging

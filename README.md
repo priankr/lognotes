@@ -60,6 +60,7 @@ For build instructions, platform-specific notes, and Mac setup see [documentatio
 ## Things To Know
 
 - **Transcription Speed**: Typically bigger speech-to-text models will take a bit longer to transcribe the text, but they have better accuracy. I have optimized the speed as much as I can. It should be reasonably fast even on CPUs.
+- **First Transcription**: The very first transcription may be slow since the speech detection tool has to start up. You may notice the same difference in speed after restarting the app.
 - **Hotkeys**: If you're using LogNotes primarily on a specific app (e.g., Cursor, Obsidian, Jira), make sure your hotkey doesn't conflict with any existing shortcuts in those apps.  
 - **Windows App Builds**: If you make changes to the code and rebuild the Windows app it will take *several* minutes (just fyi).  
 - **Antivirus Scans**: The first time you run the Windows app your antivirus software may need to scan it before you can use it. Once the scan is over just reopen the app and it should work as expected.  

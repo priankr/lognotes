@@ -144,6 +144,8 @@ class LogNotesController:
             try:
                 logger.info(f"Warming model in background: {spec.id}")
                 instance = create_transcriber(spec.id)
+                if hasattr(instance, "load"):
+                    instance.load()
                 with self._warm_lock:
                     self._warm_transcribers.setdefault(spec.id, instance)
                 logger.info(f"Warmed: {spec.id}")
@@ -612,6 +614,10 @@ class LogNotesController:
             try:
                 self._app.set_status("processing", "Loading models...")
                 self._init_transcriber(primary_id)
+                # Actually load the WhisperModel into memory now so the first
+                # transcription doesn't pay the 5-8s cold-load cost.
+                if hasattr(self._transcriber, "load"):
+                    self._transcriber.load()
                 self._init_grammar(self._app.config["ollama_model"])
                 self._grammar_is_available(force_refresh=True)
                 self._app.set_status("ready", "Ready")
