@@ -154,7 +154,7 @@ Adding another ASR model is a one-line append — the Settings dropdown, Activit
 
 **`device.py`** — single shared probe: tries `ctranslate2.get_cuda_device_count()` and `"CUDAExecutionProvider" in onnxruntime.get_available_providers()` once per process (`@lru_cache`) and exposes a `DeviceInfo` consumed by both backends.
 
-**`WhisperTranscriber`** - `faster-whisper`, lazy-loaded, yields segments for checkpoint pasting. Auto-selects `("cuda", "float16")` when CUDA is detected, else `("cpu", "int8")`. Uses `beam_size=1` for lower dictation latency and relies on `faster-whisper`'s internal VAD instead of a separate controller-side VAD pass.
+**`WhisperTranscriber`** - `faster-whisper`, eagerly loaded on startup via `load()`, yields segments for checkpoint pasting. Auto-selects `("cuda", "float16")` when CUDA is detected, else `("cpu", "int8")`. Uses `beam_size=1` for lower dictation latency and relies on `faster-whisper`'s internal VAD instead of a separate controller-side VAD pass.
 
 **`ParakeetTranscriber`** — onnx-asr (lazy import). Maps the registry `backend_arg` (`nvidia/parakeet-tdt-0.6b-v3`) to the onnx-asr id `nemo-parakeet-tdt-0.6b-v3` and constructs an ORT session with `[CUDAExecutionProvider, CPUExecutionProvider]` when GPU is available, else CPU only. onnx-asr returns full transcripts per call; we split on sentence boundaries to feed the checkpoint-paste pipeline natural chunks. Models cache under `%LOCALAPPDATA%\LogNotesApp\cache\hf` via `HF_HOME`.
 
@@ -366,9 +366,9 @@ Note: `pyautogui` was removed from final implementation — `pynput` handles key
 
 ### 4. First Transcription Slow
 
-**Problem:** Whisper model loads on first use.
+**Problem:** `preload()` created `WhisperTranscriber` wrapper objects but never called `WhisperModel()` on them, so the app showed "Ready" while models were still unloaded. The first transcription paid the full cold-load cost (5–8 s for small).
 
-**Solution:** Background preloading in `LogNotesController.run()`, plus a short-lived cached Ollama availability probe so grammar-enabled runs do not pay a network check on every utterance.
+**Solution:** Added a public `load()` method to `WhisperTranscriber` that calls `_load_model()`. Both `preload()` and `_warm_other_models()` now call it so all models are in memory before the user's first recording. A short-lived cached Ollama availability probe prevents a network check on every utterance when grammar is enabled.
 
 ### 5. Repeated Recording Startup Overhead
 
