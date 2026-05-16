@@ -66,6 +66,13 @@ def _paste_via_clipboard(text: str, clear_clipboard: bool = True) -> bool:
                 _keyboard.press('v')
                 _keyboard.release('v')
 
+        if not clear_clipboard:
+            # Without this, the next chunk's pyperclip.copy() overwrites the
+            # clipboard before the target app has processed the Ctrl+V event,
+            # causing it to paste the wrong chunk. The clear_clipboard=True
+            # path is fine — its 5s cleanup sleep provides sufficient headroom.
+            time.sleep(0.15)
+
         return True
     finally:
         if clear_clipboard:

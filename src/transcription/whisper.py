@@ -44,11 +44,23 @@ class WhisperTranscriber:
                 f"Loading Whisper model '{self.model_size}' "
                 f"(device={self.device}, compute_type={self.compute_type})..."
             )
-            self._model = WhisperModel(
-                self.model_size,
-                device=self.device,
-                compute_type=self.compute_type,
-            )
+            try:
+                self._model = WhisperModel(
+                    self.model_size,
+                    device=self.device,
+                    compute_type=self.compute_type,
+                )
+            except Exception as e:
+                if _is_ssl_error(e):
+                    log.warning("SSL error fetching model metadata — retrying from local cache")
+                    self._model = WhisperModel(
+                        self.model_size,
+                        device=self.device,
+                        compute_type=self.compute_type,
+                        local_files_only=True,
+                    )
+                else:
+                    raise
             log.info("Whisper model loaded.")
 
     def transcribe(self, audio: np.ndarray, language: Optional[str] = "en") -> str:
@@ -97,3 +109,7 @@ def _auto_device() -> tuple[str, str]:
     if info.ctranslate2_cuda:
         return "cuda", "float16"
     return "cpu", "int8"
+
+
+def _is_ssl_error(exc: Exception) -> bool:
+    return "SSL" in str(exc) or "certificate" in str(exc).lower()

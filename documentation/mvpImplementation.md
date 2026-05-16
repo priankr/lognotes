@@ -154,7 +154,7 @@ Adding another ASR model is a one-line append — the Settings dropdown, Activit
 
 **`device.py`** — single shared probe: tries `ctranslate2.get_cuda_device_count()` and `"CUDAExecutionProvider" in onnxruntime.get_available_providers()` once per process (`@lru_cache`) and exposes a `DeviceInfo` consumed by both backends.
 
-**`WhisperTranscriber`** - `faster-whisper`, eagerly loaded on startup via `load()`, yields segments for checkpoint pasting. Auto-selects `("cuda", "float16")` when CUDA is detected, else `("cpu", "int8")`. Uses `beam_size=1` for lower dictation latency and relies on `faster-whisper`'s internal VAD instead of a separate controller-side VAD pass.
+**`WhisperTranscriber`** - `faster-whisper`, eagerly loaded on startup via `load()`, yields segments for checkpoint pasting. Auto-selects `("cuda", "float16")` when CUDA is detected, else `("cpu", "int8")`. Uses `beam_size=1` for lower dictation latency and relies on `faster-whisper`'s internal VAD instead of a separate controller-side VAD pass. If model load fails with an SSL/certificate error (e.g. corporate proxy with SSL inspection), `_load_model` retries with `local_files_only=True` to load from the local cache without contacting HuggingFace.
 
 **`ParakeetTranscriber`** — onnx-asr (lazy import). Maps the registry `backend_arg` (`nvidia/parakeet-tdt-0.6b-v3`) to the onnx-asr id `nemo-parakeet-tdt-0.6b-v3` and constructs an ORT session with `[CUDAExecutionProvider, CPUExecutionProvider]` when GPU is available, else CPU only. onnx-asr returns full transcripts per call; we split on sentence boundaries to feed the checkpoint-paste pipeline natural chunks. Models cache under `%LOCALAPPDATA%\LogNotesApp\cache\hf` via `HF_HOME`.
 
@@ -238,7 +238,7 @@ Pastes text at the cursor position.
 def paste_text(text: str, method: str = "clipboard", clear_clipboard: bool = True) -> bool
 ```
 
-Note: `clear_clipboard=False` is used for mid-stream chunks to avoid the 5s clear between sentences; the final chunk uses `True`. The clipboard copy and clear are wrapped in `try/finally` so clearing is guaranteed even if an exception occurs during paste simulation.
+Note: `clear_clipboard=False` is used for mid-stream chunks to avoid the 5s clear between sentences; the final chunk uses `True`. The clipboard copy and clear are wrapped in `try/finally` so clearing is guaranteed even if an exception occurs during paste simulation. When `clear_clipboard=False`, a 150ms post-Ctrl+V sleep ensures the target application reads the clipboard before the next chunk's `pyperclip.copy()` overwrites it.
 
 ### LogNotesApp (`src/ui/app.py`)
 
@@ -404,6 +404,18 @@ Note: `pyautogui` was removed from final implementation — `pynput` handles key
 **Problem:** A frozen build can be missing the `sounddevice` runtime payload even though microphone code imports it at startup.
 
 **Solution:** `AudioRecorder` now imports `sounddevice` defensively and reports unavailability through `AudioBackendUnavailableError`, while the controller shows a UI error instead of crashing. PyInstaller builds also bundle the `sounddevice` runtime payload and PortAudio DLLs.
+
+### 11. First Chunk Missing from Multi-Sentence Paste
+
+**Problem:** In checkpoint pasting, `_paste_via_clipboard` returned immediately after firing the Ctrl+V key event when `clear_clipboard=False`. The next chunk's `pyperclip.copy()` ran before the target application had processed the keystroke, overwriting the clipboard. The first chunk's Ctrl+V event then read the second chunk's content, causing the first sentence to appear only in clipboard history while remaining sentences were pasted.
+
+**Solution:** Added a 150ms post-Ctrl+V sleep in `_paste_via_clipboard` when `clear_clipboard=False`, giving the target application time to read the clipboard before it is overwritten. The `clear_clipboard=True` path is unaffected — its 5s cleanup sleep already provides sufficient headroom.
+
+### 12. SSL Certificate Error Prevents Model Load on Corporate Networks
+
+**Problem:** `faster-whisper` contacts HuggingFace Hub to verify the model revision on every `WhisperModel()` call, even when the model is already cached locally. On networks with SSL inspection (e.g. corporate proxies that present their own certificate), this fails with `CERTIFICATE_VERIFY_FAILED`, causing transcription to error out.
+
+**Solution:** `_load_model` catches SSL/certificate errors and retries `WhisperModel()` with `local_files_only=True`, bypassing the remote revision check and loading directly from the local cache. If the model is not cached and SSL is broken, the error propagates normally.
 
 ## Security Features
 
