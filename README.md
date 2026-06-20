@@ -3,13 +3,15 @@
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)
 ![Whisper](https://img.shields.io/badge/Whisper-faster--whisper-412991?style=flat)
 ![Ollama](https://img.shields.io/badge/Ollama-grammar%20cleanup-222222?style=flat)
-![UI](https://img.shields.io/badge/UI-ttkbootstrap-0078D4?style=flat)
+![UI](https://img.shields.io/badge/UI-Electron-47848F?style=flat&logo=electron&logoColor=white)
 ![Audio](https://img.shields.io/badge/Audio-sounddevice%20%7C%20Silero%20VAD-E95420?style=flat)
 ![Hotkeys](https://img.shields.io/badge/Hotkeys-pynput-4CAF50?style=flat)
 
 LogNotes is a lightweight, local speech-to-text application that transcribes your recorded notes and pastes the result wherever your cursor is placed. It's primarily designed to "log" short notes. I use it quite often when instructing coding agents (e.g, when providing feedback, describing bugs, or outlining requirements).
 
 The app uses Whisper for transcription and Ollama for optional grammar cleanup. NVIDIA Parakeet (via ONNX Runtime) is supported as an opt-in alternative. The current version is still very much a work in progress, but I'll definitely be working on further improvements.
+
+LogNotes is built as an **Electron front end** (the UI) over a **Python back end** that runs the ML pipeline and OS integration. See [ARCHITECTURE.md](ARCHITECTURE.md) for how it all fits together.
 
 ## Inspiration
 
@@ -19,12 +21,13 @@ When looking into open source solutions, I came across [Handy](https://github.co
 
 ## Requirements
 
-- Python 3.10+
-- Ollama (optional)
+- Python 3.10+ (the back-end ML pipeline)
+- Node.js 18+ (the Electron front end)
+- Ollama (optional, for grammar cleanup)
 
 ## Installation
 
-### 1. Clone and Set Up Virtual Environment
+### 1. Clone and Set Up the Python Back End
 
 ```bash
 cd LogNotes
@@ -35,12 +38,15 @@ venv\Scripts\activate
 
 # macOS/Linux
 source venv/bin/activate
+
+pip install -r requirements.txt
 ```
 
-### 2. Install Dependencies
+### 2. Install the Electron Front End
 
 ```bash
-pip install -r requirements.txt
+cd electron
+npm install
 ```
 
 ### 3. Set Up Ollama (Optional, for Grammar Cleanup)
@@ -53,9 +59,7 @@ ollama pull llama3.2:1b
 
 ## Desktop App
 
-The repo includes a pre-built Windows app at `dist/LogNotes/LogNotes.exe`.  If you've downloaded the code you can run it directly without a Python install.
-
-For build instructions, platform-specific notes, and Mac setup see [documentation/desktopAppConfiguration.md](documentation/desktopAppConfiguration.md).
+LogNotes is an Electron app with a Python back end. Build a Windows installer with `build\build-electron.ps1` (produces `dist-electron\LogNotes Setup *.exe`).
 
 ## Things To Know
 
@@ -90,8 +94,11 @@ For build instructions, platform-specific notes, and Mac setup see [documentatio
 ### Start the App
 
 ```bash
-python main.py
+cd electron && npm start
 ```
+
+This launches the Electron UI, which spawns the Python back end automatically.
+(Activate the venv first so the back end's Python dependencies are available.)
 
 ### Recording
 
@@ -113,39 +120,38 @@ python main.py
 
 ```
 LogNotes/
-├── main.py                    # Entry point and controller
+├── sidecar.py                 # Python back end: WebSocket/RPC server + bridge
 ├── requirements.txt           # Python dependencies
+├── ARCHITECTURE.md            # Full architecture reference
+├── electron/                  # Electron front end
+│   ├── main.js               # Process spawn/supervision, tray, lifecycle
+│   ├── preload.js            # Hardened contextBridge surface
+│   ├── package.json          # electron-builder config
+│   └── renderer/             # index.html/renderer.js (tabs), overlay.html/.js
 ├── src/
+│   ├── controller.py         # LogNotesController — the orchestrator (Tk-free)
+│   ├── ui_bridge.py          # UIBridge protocol the controller talks through
+│   ├── config.py             # Schema, validation, 0o600 save, ConfigStore
+│   ├── activity.py           # In-memory ActivityStore (session-scoped)
 │   ├── paths.py              # User data / cache dir + bundled-asset resolution
-│   ├── audio/
-│   │   ├── recorder.py       # Microphone recording (sounddevice)
-│   │   └── vad.py            # Voice activity detection (Silero)
-│   ├── transcription/
-│   │   ├── registry.py       # Model registry (id → display → backend)
-│   │   ├── base.py           # Transcriber protocol
-│   │   ├── device.py         # CUDA detection (ctranslate2 + onnxruntime)
-│   │   ├── whisper.py        # Whisper backend (faster-whisper)
-│   │   └── parakeet.py       # Parakeet backend (onnx-asr / ONNX Runtime)
-│   ├── processing/
-│   │   └── grammar.py        # Grammar cleanup (Ollama)
-│   ├── input/
-│   │   ├── hotkey.py         # Global hotkey listener (pynput)
-│   │   └── paster.py         # Text pasting utility
-│   └── ui/
-│       ├── app.py            # ttkbootstrap GUI + log viewer + overlay
-│       └── activity.py       # Session activity store and Activity tab
-├── build/                    # PyInstaller specs + Inno Setup + build.ps1
+│   ├── audio/                # recorder.py (sounddevice), vad.py (Silero)
+│   ├── transcription/        # registry.py, whisper.py, parakeet.py, device.py
+│   ├── processing/grammar.py # Grammar cleanup (Ollama)
+│   ├── input/                # hotkey.py (pynput), paster.py (paste/clipboard)
+│   └── ui/                   # Legacy Tk UI (reference only; entry main.py)
+├── build/                    # PyInstaller specs + build-electron.ps1
+├── tests/                    # unittest suite + sidecar protocol smoke test
 └── documentation/
-    ├── configuration.md             # Config file, schema, settings, validation
-    ├── troubleshooting.md           # Common issues and fixes
-    ├── desktopAppConfiguration.md   # Desktop packaging details
-    └── mvpImplementation.md         # Architecture and implementation details
+    ├── configuration.md      # Config file, schema, settings, validation
+    └── troubleshooting.md    # Common issues and fixes
 ```
 
 ## Tech Stack
 
 | Component | Library |
 |-----------|---------|
+| Front end | Electron |
+| Back-end IPC | WebSocket (loopback) |
 | Transcription (default) | faster-whisper |
 | Transcription (optional, opt-in) | onnx-asr + ONNX Runtime (Parakeet) |
 | Voice Activity Detection | Silero VAD (via torch) |
@@ -153,15 +159,13 @@ LogNotes/
 | Global Hotkeys | pynput |
 | Text Pasting | pynput + pyperclip |
 | Grammar Cleanup | Ollama Python client |
-| UI | ttkbootstrap (modern themed Tkinter) |
 
 
 ## Documentation
 
+- [Architecture](ARCHITECTURE.md) — The full picture: the Electron + Python-back-end split, the transcription pipeline, the IPC protocol, module layout, packaging, and the security model.
 - [Configuration](documentation/configuration.md) — Covers the config file location, full settings schema, valid values for each option, and the validation rules applied on load.
 - [Troubleshooting](documentation/troubleshooting.md) — Step-by-step fixes for common issues including hotkeys not firing, audio problems, transcription quality, Ollama connectivity, and packaged build failures.
-- [Desktop Packaging](documentation/desktopAppConfiguration.md) — Instructions for building the Windows `.exe` and Mac `.app`, PyInstaller spec details, Inno Setup installer configuration, and runtime path layout.
-- [Implementation](documentation/mvpImplementation.md) — Deep dive into the architecture, component responsibilities, the checkpoint-pasting pipeline, security model, and known design decisions.
 
 ## Disclaimer
 

@@ -33,7 +33,8 @@ MODELS: tuple[ModelSpec, ...] = (
     #   1. Uncomment the line below.
     #   2. Uncomment `onnx-asr[hub]` in requirements.txt and `pip install` it.
     #   3. (Packaged builds only) add "onnxruntime", "onnx_asr" to _BUNDLE_PKGS
-    #      in build/LogNotes.spec and rebuild.
+    #      in build/LogNotes.spec (and build/LogNotes-tk.spec for the Tk build)
+    #      and rebuild.
     # Other onnx-asr models also work here — supported ids include
     # nemo-parakeet-tdt-0.6b-v2/v3 and nemo-canary-*; see parakeet.py for the
     # backend_arg → onnx-asr id mapping.
@@ -84,6 +85,18 @@ def normalize_id(value: str | None) -> str:
     if value in _LEGACY_ALIASES:
         return _LEGACY_ALIASES[value]
     return DEFAULT_ID
+
+
+def is_known_id(value: str | None) -> bool:
+    """True if `value` is a recognized model reference (id, display, or alias).
+
+    Unlike normalize_id(), this does NOT coerce unknown values to the default —
+    it reports whether the value is genuinely recognized. Used to reject garbage
+    on a direct config set rather than silently falling back.
+    """
+    return bool(value) and (
+        value in _BY_ID or value in _BY_DISPLAY or value in _LEGACY_ALIASES
+    )
 
 
 def get(model_id: str) -> ModelSpec:

@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
 # Virtual environments
 venv/
@@ -21,10 +22,15 @@ env/
 # Distribution / packaging
 dist/
 *.egg-info/
-# PyInstaller build intermediates (inside build/) and Inno Setup output,
-# but keep the versioned build scripts/specs themselves.
+
+# PyInstaller intermediates + Inno Setup output (build scripts/specs are kept).
+# Both build.ps1 and build-electron.ps1 pass --workpath build\build
 build/build/
 build/Output/
+
+# Fallback: if PyInstaller is run directly (no --workpath), it writes
+# intermediates to build/<spec-name>/. Guard the Electron back-end build name.
+build/LogNotes/
 
 # Local development
 *.log
@@ -36,6 +42,17 @@ models/
 
 # Config (user-specific)
 config.json
+
+# Node / Electron
+node_modules/
+electron/node_modules/
+electron/out/
+dist-electron/
+
+# Local-only reference files for development purposes
+archive/
+documentation/implementations/
+CLAUDE.local.md
 
 # OS files
 .DS_Store

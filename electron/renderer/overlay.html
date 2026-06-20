@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src ws://127.0.0.1:*; style-src 'self' 'unsafe-inline';" />
+  <title>LogNotes Overlay</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      user-select: none;
+    }
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 100%;
+      box-sizing: border-box;
+      padding: 0 12px;
+      background: #1e1e1e;
+      border: 1px solid #555;
+      border-radius: 10px;
+      color: #e8e8e8;
+      font-size: 12px;
+      /* The whole pill is the drag handle. */
+      -webkit-app-region: drag;
+      cursor: grab;
+    }
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #6c757d;
+      flex: 0 0 auto;
+    }
+    .dot[data-state="ready"] { background: #28a745; }
+    .dot[data-state="recording"] { background: #dc3545; }
+    .dot[data-state="processing"] { background: #ffc107; }
+    .dot[data-state="error"] { background: #dc3545; }
+  </style>
+</head>
+<body>
+  <div class="pill" id="pill" title="Drag to move · right-click to cycle corner">
+    <span class="dot" id="dot" data-state="connecting"></span>
+    <span id="label">Starting…</span>
+  </div>
+  <script src="overlay.js"></script>
+</body>
+</html>

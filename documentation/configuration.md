@@ -1,6 +1,6 @@
 # Configuration
 
-> **Docs:** [Configuration](configuration.md) · [Troubleshooting](troubleshooting.md) · [Desktop packaging](desktopAppConfiguration.md) · [Implementation](mvpImplementation.md)
+> **Docs:** [Configuration](configuration.md) · [Troubleshooting](troubleshooting.md)
 
 ---
 
@@ -12,7 +12,7 @@
 | macOS | `~/Library/Application Support/LogNotes/config.json` |
 | Linux | `~/.config/LogNotes/config.json` |
 
-The same file is shared between the Python (`python main.py`) and packaged (`.exe`) builds. Written with restricted permissions (0600 on Unix).
+The same file is shared across dev and packaged runs (and the legacy Tk build). Written with restricted permissions (0600 on Unix).
 
 ---
 

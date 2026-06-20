@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self'; connect-src ws://127.0.0.1:*; style-src 'self' 'unsafe-inline';" />
+  <title>LogNotes</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <img class="app-logo" src="assets/logo.png" alt="LogNotes" />
+    <span class="app-name">LogNotes</span>
+  </header>
+
+  <nav class="tabbar">
+    <button class="tab active" data-tab="settings">Settings</button>
+    <button class="tab" data-tab="activity">Activity</button>
+    <button class="tab" data-tab="logs">Logs</button>
+  </nav>
+
+  <!-- Status (shared, always visible) -->
+  <section class="status-card">
+    <div class="status-row">
+      <span id="status-dot" class="dot" data-state="connecting"></span>
+      <span id="status-text">Connecting to sidecar&hellip;</span>
+    </div>
+    <p id="status-detail" class="detail"></p>
+  </section>
+
+  <!-- Settings panel -->
+  <section id="panel-settings" class="panel">
+    <fieldset>
+      <legend>Hotkey</legend>
+      <div class="hotkey-row">
+        <code id="hotkey-display" class="hotkey">&mdash;</code>
+        <button id="hotkey-change">Change Hotkey</button>
+      </div>
+      <p class="hint">Must include a modifier (Ctrl/Alt/Shift) and one key.</p>
+      <p id="hotkey-error" class="error"></p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Recording Mode</legend>
+      <label class="radio"><input type="radio" name="ptt" value="hold" /> Hold (press and hold to record)</label>
+      <label class="radio"><input type="radio" name="ptt" value="toggle" /> Toggle (press to start, press again to stop)</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Transcription Model</legend>
+      <select id="model-select"></select>
+    </fieldset>
+
+    <fieldset>
+      <legend>Grammar Cleanup</legend>
+      <label class="check"><input id="grammar-toggle" type="checkbox" /> Enable grammar cleanup</label>
+      <p id="ollama-model" class="hint"></p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Appearance</legend>
+      <label class="radio"><input type="radio" name="theme" value="dark" /> Dark</label>
+      <label class="radio"><input type="radio" name="theme" value="light" /> Light</label>
+      <p class="hint">Theme applies when the app is restarted.</p>
+    </fieldset>
+  </section>
+
+  <!-- Activity panel -->
+  <section id="panel-activity" class="panel hidden">
+    <div class="activity-toolbar">
+      <span class="activity-title">Session Activity</span>
+      <button id="activity-clear" class="ghost">Clear</button>
+    </div>
+    <p class="hint">Transcriptions from this session. Cleared when the app closes.</p>
+    <div id="activity-list"></div>
+  </section>
+
+  <!-- Logs panel -->
+  <section id="panel-logs" class="panel hidden">
+    <div class="activity-toolbar">
+      <span class="activity-title">Session Logs</span>
+      <span>
+        <button id="logs-copy" class="ghost">Copy All</button>
+        <button id="logs-clear" class="ghost">Clear</button>
+      </span>
+    </div>
+    <pre id="logs-output" class="logs"></pre>
+  </section>
+
+  <footer>
+    <span>port <span id="port">&mdash;</span></span>
+    <span id="conn">opening&hellip;</span>
+  </footer>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -8,6 +8,7 @@ from .registry import (
     display_for,
     get,
     normalize_id,
+    is_known_id,
 )
 from .whisper import WhisperTranscriber
 
@@ -34,5 +35,6 @@ __all__ = [
     "display_for",
     "get",
     "normalize_id",
+    "is_known_id",
     "create_transcriber",
 ]

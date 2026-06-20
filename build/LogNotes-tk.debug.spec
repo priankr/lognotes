@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Debug spec: identical to LogNotes.spec but console=True so stderr is
-# visible. Use this when the release exe launches but silently fails (missing
-# DLL, hidden import). Build:
-#     pyinstaller build/LogNotes.debug.spec --clean --noconfirm
+# Debug spec for the legacy Tk app: identical to LogNotes-tk.spec but
+# console=True so stderr is visible. Use this when the release exe launches but
+# silently fails (missing DLL, hidden import). Build:
+#     pyinstaller build/LogNotes-tk.debug.spec --clean --noconfirm
 
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_data_files
@@ -54,7 +54,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="LogNotes-debug",
+    name="LogNotes-tk-debug",
     debug=False,
     strip=False,
     upx=False,
@@ -69,5 +69,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="LogNotes-debug",
+    name="LogNotes-tk-debug",
 )

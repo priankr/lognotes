@@ -3,22 +3,16 @@ from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-import json
 import logging
-import os
-import re
 import threading
-from pathlib import Path
 from typing import Optional, Callable
-from urllib.parse import urlparse
 from pynput import keyboard
 from PIL import Image, ImageTk
 
 from .activity import ActivityStore, ActivityTab
-from ..paths import resource_path, user_data_dir, user_cache_dir
+from ..paths import resource_path, user_cache_dir
+from .. import config as app_config
 from ..transcription import (
-    DEFAULT_ID as DEFAULT_MODEL_ID,
-    all_ids as _all_model_ids,
     all_displays as _all_model_displays,
     display_for as _display_for_model,
     normalize_id as _normalize_model_id,
@@ -215,28 +209,18 @@ class HotkeyCapture(tk.Toplevel):
 class LogNotesApp(ttk.Window):
     """Main application window for LogNotes."""
 
-    CONFIG_FILE = str(user_data_dir() / "config.json")
-    DEFAULT_CONFIG = {
-        "hotkey": "ctrl+shift+d",
-        "whisper_model": DEFAULT_MODEL_ID,
-        "enable_grammar": True,
-        "ollama_model": "llama3.2:1b",
-        "ollama_host": "http://localhost:11434",
-        "theme": "dark",
-        "push_to_talk_mode": "hold",
-        "overlay_corner": "bottom-right"
-    }
-
-    # Security: Whitelist of allowed values
-    ALLOWED_WHISPER_MODELS = set(_all_model_ids())
-    ALLOWED_MODIFIERS = {"ctrl", "shift", "alt", "cmd"}
-    ALLOWED_CORNERS = {"top-left", "top-right", "bottom-left", "bottom-right"}
-    # Regex for valid Ollama model names (alphanumeric, dots, colons, hyphens)
-    OLLAMA_MODEL_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]*$")
+    # Config schema, validation, and persistence live in src/config.py so the
+    # same logic backs both this Tk UI and the headless sidecar. These aliases
+    # are kept for backward compatibility with any external references.
+    CONFIG_FILE = app_config.CONFIG_FILE
+    DEFAULT_CONFIG = app_config.DEFAULT_CONFIG
 
     def __init__(self):
-        # Load config first to get theme
-        self._config = self._load_config()
+        # Load config first to get theme. The ConfigStore is the shared,
+        # file-backed config object; the controller reads from the same
+        # instance via `config_store`, so Settings changes stay in sync.
+        self.config_store = app_config.ConfigStore(self._load_config())
+        self._config = self.config_store
 
         # Initialize with theme
         theme_name = "darkly" if self._config["theme"] == "dark" else "flatly"
@@ -882,6 +866,23 @@ class LogNotesApp(ttk.Window):
 
         self.after(0, _update)
 
+    def show_audio_error(self, message: str):
+        """Surface a fatal audio-backend error to the user (UIBridge method).
+
+        Safe to call from any thread — marshals onto the Tk main loop.
+        """
+        def _show_error():
+            try:
+                messagebox.showerror(
+                    "Audio Input Unavailable",
+                    f"{message}\n\nReinstall or rebuild the app with the audio backend included.",
+                    parent=self
+                )
+            except Exception as exc:
+                logger.warning(f"Could not show audio backend error dialog: {exc}")
+
+        self.after(0, _show_error)
+
     def _change_hotkey(self):
         def on_save(new_hotkey: str):
             self._config["hotkey"] = new_hotkey
@@ -956,87 +957,11 @@ class LogNotesApp(ttk.Window):
     # Config                                                               #
     # ------------------------------------------------------------------ #
 
-    def _validate_config(self, config: dict) -> dict:
-        validated = self.DEFAULT_CONFIG.copy()
-
-        raw_model = config.get("whisper_model")
-        normalized = _normalize_model_id(raw_model)
-        if normalized in self.ALLOWED_WHISPER_MODELS:
-            if raw_model != normalized:
-                logger.info(f"Migrated whisper_model '{raw_model}' -> '{normalized}'")
-            validated["whisper_model"] = normalized
-        else:
-            logger.warning(f"Invalid whisper_model '{raw_model}', using default")
-
-        hotkey = config.get("hotkey", "").lower()
-        if hotkey:
-            parts = hotkey.split("+")
-            modifiers = [p for p in parts if p in self.ALLOWED_MODIFIERS]
-            keys = [p for p in parts if p not in self.ALLOWED_MODIFIERS and p.isalnum() and len(p) <= 10]
-            if modifiers and len(keys) == 1:
-                validated["hotkey"] = "+".join(modifiers + keys)
-            else:
-                logger.warning(f"Invalid hotkey '{hotkey}', using default")
-
-        if isinstance(config.get("enable_grammar"), bool):
-            validated["enable_grammar"] = config["enable_grammar"]
-
-        ollama_host = config.get("ollama_host", "")
-        if isinstance(ollama_host, str) and ollama_host and len(ollama_host) <= 256:
-            try:
-                _parsed = urlparse(ollama_host)
-                if _parsed.scheme in ("http", "https") and _parsed.netloc:
-                    validated["ollama_host"] = ollama_host
-                else:
-                    logger.warning(f"Invalid ollama_host '{ollama_host}', using default")
-            except Exception:
-                logger.warning(f"Invalid ollama_host '{ollama_host}', using default")
-        elif ollama_host:
-            logger.warning(f"Invalid ollama_host '{ollama_host}', using default")
-
-        ollama_model = config.get("ollama_model", "")
-        if ollama_model and self.OLLAMA_MODEL_PATTERN.match(ollama_model) and len(ollama_model) <= 100:
-            validated["ollama_model"] = ollama_model
-        else:
-            logger.warning(f"Invalid ollama_model '{ollama_model}', using default")
-
-        if config.get("theme") in ["dark", "light"]:
-            validated["theme"] = config["theme"]
-
-        if config.get("push_to_talk_mode") in ["hold", "toggle"]:
-            validated["push_to_talk_mode"] = config["push_to_talk_mode"]
-
-        if config.get("overlay_corner") in self.ALLOWED_CORNERS:
-            validated["overlay_corner"] = config["overlay_corner"]
-
-        return validated
-
     def _load_config(self) -> dict:
-        config_path = Path(self.CONFIG_FILE)
-        if config_path.exists():
-            try:
-                with open(config_path, "r") as f:
-                    loaded = json.load(f)
-                    return self._validate_config(loaded)
-            except json.JSONDecodeError as e:
-                logger.error(f"Config file has invalid JSON: {e}")
-            except PermissionError as e:
-                logger.error(f"Permission denied reading config: {e}")
-            except Exception as e:
-                logger.error(f"Failed to load config: {e}")
-        return self.DEFAULT_CONFIG.copy()
+        return app_config.load_config()
 
     def _save_config(self):
-        try:
-            # Create the file with restricted permissions from the start so
-            # there is no window between creation and chmod (race condition).
-            # O_TRUNC resets an existing file; O_CREAT creates if absent.
-            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-            fd = os.open(self.CONFIG_FILE, flags, 0o600)
-            with os.fdopen(fd, "w") as f:
-                json.dump(self._config, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save config: {e}")
+        self.config_store.save()
 
     @property
     def config(self) -> dict:

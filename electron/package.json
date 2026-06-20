@@ -1,0 +1,56 @@
+{
+  "name": "lognotes-electron",
+  "version": "0.1.0",
+  "description": "LogNotes — local speech-to-text dictation: push-to-talk, Whisper transcription, optional grammar cleanup, paste at cursor.",
+  "author": "LogNotes",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "rcedit": "^5.0.2"
+  },
+  "build": {
+    "appId": "com.lognotes.app",
+    "productName": "LogNotes",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/LogNotes",
+        "to": "sidecar"
+      },
+      {
+        "from": "../src/ui/assets/logo.ico",
+        "to": "assets/logo.ico"
+      },
+      {
+        "from": "../src/ui/assets/logo.png",
+        "to": "assets/logo.png"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "../src/ui/assets/logo.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LogNotes"
+    }
+  }
+}

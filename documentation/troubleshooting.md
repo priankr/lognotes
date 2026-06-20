@@ -1,6 +1,6 @@
 # Troubleshooting
 
-> **Docs:** [Configuration](configuration.md) · [Troubleshooting](troubleshooting.md) · [Desktop packaging](desktopAppConfiguration.md) · [Implementation](mvpImplementation.md)
+> **Docs:** [Configuration](configuration.md) · [Troubleshooting](troubleshooting.md)
 
 ---
 
@@ -53,7 +53,7 @@
 - Right-click the overlay to cycle through the four corners.
 - Left-click and drag to reposition manually.
 - The corner is persisted in config; the exact drag position is not — it resets to the configured corner on restart.
-- The overlay uses `SPI_GETWORKAREA` to avoid the taskbar, but secondary monitors with non-standard taskbar positions may still cause overlap. Switch corners to work around it.
+- The overlay is positioned within the primary display's work area to avoid the taskbar, but secondary monitors with non-standard taskbar positions may still cause overlap. Switch corners to work around it.
 
 ---
 
@@ -98,15 +98,23 @@
 
 ---
 
-## Packaged App Crashes Silently on Launch
+## Packaged App Opens but Stays "Connecting to Sidecar…"
 
-- Rebuild with the debug spec to get a console with stderr output:
+The window appears but never reaches "Ready" — the Electron front end can't reach
+the Python back end.
+
+- Run the bundled back end directly to see its error. It is built with a console,
+  so it prints what fails:
   ```powershell
-  powershell -ExecutionPolicy Bypass -File build\build.ps1 -Debug
-  dist\LogNotes-debug\LogNotes-debug.exe
+  "%LOCALAPPDATA%\Programs\LogNotes\resources\sidecar\LogNotes.exe"
   ```
-- Common causes: missing DLL, missing hidden import, or a `sounddevice` / PortAudio payload issue. The console output will identify the failing module.
-- See [desktopAppConfiguration.md](desktopAppConfiguration.md) for known packaging issues.
+  (Path varies with the install location; look under the install dir's
+  `resources\sidecar\`.) A healthy run prints a `PORT <n>` line.
+- Common causes: a missing DLL / hidden import, or a `sounddevice` / PortAudio
+  payload issue. The console output identifies the failing module.
+- First launch is slow (models load); give it time before assuming it is stuck.
+- Make sure no orphaned `LogNotes.exe` from a previous run is interfering
+  (Task Manager).
 
 ---
 

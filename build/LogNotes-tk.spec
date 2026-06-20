@@ -1,26 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for LogNotes (the Electron app's Python back end).
+# PyInstaller spec for the legacy Tk LogNotes app (release, --noconsole).
 #
-# This is the canonical LogNotes build. It packages sidecar.py, which the
-# Electron front end spawns and drives. The legacy Tk build lives in
-# LogNotes-tk.spec (kept locally for reference).
+# Superseded by the Electron build (build/LogNotes.spec packages the sidecar).
+# Kept locally for reference; produces a standalone Tk app.
 #
 # Build:
-#     pyinstaller build/LogNotes.spec --clean --noconfirm
+#     pyinstaller build/LogNotes-tk.spec --clean --noconfirm
 #
 # Output:
-#     dist/LogNotes/LogNotes.exe  (plus bundled runtime)
-#
-# Mirrors the Tk spec's native-DLL collection for the torch/whisper stack and
-# the "do not exclude unittest" rule, but the entry point is sidecar.py and
-# websockets is added. console=True so the `PORT <n>` handshake line the
-# Electron parent reads is emitted on a real stdout.
-#
-# The sidecar imports LogNotesController from src/controller.py (Tk-free), so it
-# no longer pulls in tkinter/LogNotesApp. The ttkbootstrap hiddenimport and the
-# src/ui/assets data below are now belt-and-suspenders (the logo is referenced
-# via src/paths) and could be trimmed if a future cleanup verifies they are
-# unused; left in place to avoid destabilizing a working build.
+#     dist/LogNotes-tk/LogNotes-tk.exe  (plus bundled runtime)
 
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_data_files
@@ -37,12 +25,13 @@ hiddenimports = [
     "sounddevice",
     "sounddevice._sounddevice",
     "silero_vad",
+    "pystray._win32",
     "ttkbootstrap",
-    "websockets",
 ]
 
 # Collect everything for native-DLL-heavy deps. Saves hours of whack-a-mole.
-# To enable Parakeet support, add "onnxruntime", "onnx_asr" here and rebuild.
+# To enable Parakeet support, add "onnxruntime", "onnx_asr" here and rebuild
+# (also uncomment the registry entry + requirements.txt line).
 _BUNDLE_PKGS = (
     "sounddevice", "faster_whisper", "ctranslate2", "torch", "torchaudio",
 )
@@ -53,13 +42,14 @@ for pkg in _BUNDLE_PKGS:
         binaries += b
         hiddenimports += h
     except Exception as e:
+        # onnx_asr is optional at build time — skip if not installed.
         print(f"[spec] collect_all skipped {pkg}: {e}")
 
 datas += collect_data_files("ttkbootstrap")
 
 
 a = Analysis(
-    [str(PROJECT_ROOT / "sidecar.py")],
+    [str(PROJECT_ROOT / "main.py")],
     pathex=[str(PROJECT_ROOT)],
     binaries=binaries,
     datas=datas,
@@ -67,7 +57,6 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # Do NOT exclude unittest — torch.utils._config_module imports it at runtime.
     excludes=["tkinter.test"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -82,13 +71,12 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="LogNotes",
+    name="LogNotes-tk",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    # console=True: the Electron parent reads the `PORT <n>` line from stdout.
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -105,5 +93,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="LogNotes",
+    name="LogNotes-tk",
 )

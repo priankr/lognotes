@@ -37,6 +37,24 @@ def paste_text(text: str, method: str = "clipboard", clear_clipboard: bool = Tru
         return False
 
 
+def copy_to_clipboard(text: str) -> bool:
+    """Copy text to the clipboard without pasting.
+
+    Used by the Activity-tab retry path, which copies the re-transcribed text
+    and lets the user choose where it goes (no auto-paste). Tk-free so the
+    controller does not depend on a UI clipboard.
+    """
+    if not text:
+        return False
+    try:
+        pyperclip.copy(text)
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Clipboard copy failed: {e}")
+        return False
+
+
 def _paste_via_clipboard(text: str, clear_clipboard: bool = True) -> bool:
     """Paste text using clipboard and Ctrl+V.
 
