@@ -1,6 +1,6 @@
 """Config round-trip and validation tests for src/config.py.
 
-Covers the Phase 0 config extraction: load -> set -> save -> reload, the
+Covers the config round-trip: load -> set -> save -> reload, the
 0o600 permission semantics, and the whitelist validation rules. Uses a temp
 file so the real %APPDATA%\\LogNotes\\config.json is never touched.
 

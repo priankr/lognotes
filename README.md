@@ -16,7 +16,7 @@ LogNotes is built as an **Electron front end** (the UI) over a **Python back end
 
 I built LogNotes because I wanted a free, fully local alternative to [Whispr Flow](https://whisperflow.app). I wanted something I could run on-device, without needing a subscription. The goal was to create the same core experience, even if it was a bit slower, and process voice recordings locally.
 
-When looking into open source solutions, I came across [Handy](https://github.com/cjpais/Handy) by @cjpais. I used this app's code as a reference for several optimizations to make LogNotes faster and extensible. I would definitely recommend checking out this app as well. 
+When looking into open source solutions, I came across [Handy](https://github.com/cjpais/Handy) by @cjpais. I used this app's code as a reference for several optimizations to make LogNotes faster and extensible. I would definitely recommend checking out Handy as well. 
 
 ## Requirements
 
@@ -49,7 +49,7 @@ npm install
 
 ## Desktop App
 
-LogNotes is an Electron app with a Python back end. Build a Windows installer with `build\build-electron.ps1` (produces `dist-electron\LogNotes Setup *.exe`).
+Build a Windows installer with `build\build-electron.ps1` (produces `dist-electron\LogNotes Setup *.exe`).
 
 ## Things To Know
 
@@ -68,14 +68,14 @@ LogNotes is an Electron app with a Python back end. Build a Windows installer wi
 - **Always-Visible Recording Overlay** - Small borderless status indicator pinned to a screen corner; drag to reposition, right-click to cycle corners.
 - **Checkpoint Pasting** - Sentences are pasted as soon as Whisper finishes each one, so partial text is preserved if processing fails mid-stream
 
-
-### Key Security Features
+### Security Features
 
 - **No Audio Storage** - Recordings are held in memory only during the app session and never written to disk. The Activity tab keeps recent clips in RAM so you can retry a transcription with a different model. Everything is cleared on app close
 - **Config Validation** - All configuration values are validated against whitelists on load.
 - **Atomic Config Permissions** - The config file is created with `0o600` permissions in a single `os.open()` call, with no readable window between creation and `chmod`.
 - **Bounded Activity Memory** - The session audio cap is enforced before adding each new entry, preventing a single long recording from temporarily spiking RAM past the limit.
 - **Pinned Model Versions** - External model downloads use pinned versions.
+
 
 ## Usage
 
@@ -85,8 +85,7 @@ LogNotes is an Electron app with a Python back end. Build a Windows installer wi
 cd electron && npm start
 ```
 
-This launches the Electron UI, which spawns the Python back end automatically.
-(Activate the venv first so the back end's Python dependencies are available.)
+This launches the Electron UI, which spawns the Python back end automatically. Activate the venv first so the back end's Python dependencies are available.
 
 ### Recording
 

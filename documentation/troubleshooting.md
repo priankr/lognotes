@@ -89,18 +89,13 @@
 
 ## Packaged App Opens but Stays "Connecting to Sidecar…"
 
-The window appears but never reaches "Ready" — the Electron front end can't reach
-the Python back end.
+The window appears but never reaches "Ready" — the Electron front end can't reach the Python back end.
 
-- Run the bundled back end directly to see its error. It is built with a console,
-  so it prints what fails:
+- Run the bundled back end directly to see its error. It is built with a console, so it prints what fails:
   ```powershell
   "%LOCALAPPDATA%\Programs\LogNotes\resources\sidecar\LogNotes.exe"
   ```
-  (Path varies with the install location; look under the install dir's
-  `resources\sidecar\`.) A healthy run prints a `PORT <n>` line.
-- Common causes: a missing DLL / hidden import, or a `sounddevice` / PortAudio
-  payload issue. The console output identifies the failing module.
+  (Path varies with the install location; look under the install dir's `resources\sidecar\`.) A healthy run prints a `PORT <n>` line.
+- Common causes: a missing DLL / hidden import, or a `sounddevice` / PortAudio payload issue. The console output identifies the failing module.
 - First launch is slow (models load); give it time before assuming it is stuck.
-- Make sure no orphaned `LogNotes.exe` from a previous run is interfering
-  (Task Manager).
+- Make sure no orphaned `LogNotes.exe` from a previous run is interfering (Task Manager).

@@ -32,10 +32,6 @@ build/Output/
 # intermediates to build/<spec-name>/. Guard the Electron back-end build name.
 build/LogNotes/
 
-# Local development
-*.log
-*.tmp
-
 # Model cache
 .cache/
 models/
@@ -50,12 +46,12 @@ electron/out/
 dist-electron/
 
 # Local-only reference files for development purposes
+*.log
+*.tmp
 archive/
+memory/
 documentation/implementations/
 CLAUDE.local.md
-
-# Claude Code local memory (machine-specific, not shared)
-memory/
 
 # OS files
 .DS_Store

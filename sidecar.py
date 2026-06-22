@@ -5,8 +5,8 @@ Runs the full capture pipeline (hotkey -> recorder -> Whisper -> paste) with no
 UI, exposing a small JSON-over-WebSocket API on loopback so an
 Electron front end can drive it and receive pushed status/activity events.
 
-This is the back-end half of the Electron migration. The Tk app (main.py) is
-unchanged and still runs standalone; both share LogNotesController.
+This is the back-end half of the app; the Electron front end is the client.
+The legacy Tk app (main.py) runs standalone and shares LogNotesController.
 
 Protocol (newline framing not needed — WebSocket is message-framed):
   Request:  {"id": <int>, "method": <str>, "params": {...}}

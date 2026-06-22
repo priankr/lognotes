@@ -1,6 +1,6 @@
 // Electron main process for LogNotes.
 //
-// Responsibilities (Phase 2 skeleton):
+// Responsibilities:
 //   - spawn the Python sidecar and supervise its lifecycle
 //   - read the `PORT <n>` handshake line from the sidecar's stdout
 //   - hand that port to the renderer so it can open the WebSocket
@@ -46,8 +46,8 @@ const OVERLAY_MARGIN = 12;
 // Sidecar resolution
 // ----------------------------------------------------------------------------
 
-// In dev we run the sidecar from source via the project venv. When packaged
-// (Phase 3) this will resolve to the bundled sidecar.exe under resourcesPath.
+// Packaged: the bundled sidecar.exe under resourcesPath. Dev: the sidecar run
+// from source via the project venv.
 function resolveSidecarCommand() {
   const projectRoot = path.resolve(__dirname, '..');
 
@@ -120,7 +120,7 @@ function startSidecar() {
         reject(new Error(`sidecar exited before handshake (code ${code})`));
       }
       // If the sidecar dies while running, tear the app down — the UI is
-      // useless without it. Phase 2+ may add restart/backoff here.
+      // useless without it.
       if (mainWindow) {
         mainWindow.webContents.send('sidecar-down');
       }

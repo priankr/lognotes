@@ -520,9 +520,9 @@ class LogNotesController:
         self._hotkey.start()
 
         # Pre-load models in background (optional, improves first-use latency).
-        # Phase 1: load the configured model so live capture is ready.
-        # Phase 2: warm the remaining Whisper sizes so Activity-tab retries with
-        # a different model don't pay the cold-load cost.
+        # First load the configured model so live capture is ready, then warm
+        # the remaining Whisper sizes so Activity-tab retries with a different
+        # model don't pay the cold-load cost.
         def preload():
             primary_id = normalize_id(self._config["whisper_model"])
             try:
