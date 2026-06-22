@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """LogNotesController — the front-end-agnostic orchestrator.
 
-Drives the recorder -> VAD -> Whisper -> grammar -> paste pipeline and talks to
+Drives the recorder -> Whisper -> paste pipeline and talks to
 whichever front end is attached (the Tk app or the Electron sidecar) only through
 an injected UIBridge / ConfigStore / ActivityStore. No Tk imports here, so the
 Electron sidecar can import it without pulling in Tkinter via the Tk entry point.
@@ -18,11 +18,10 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-from src.audio import AudioRecorder, VoiceActivityDetector
+from src.audio import AudioRecorder
 from src.audio.recorder import AudioBackendUnavailableError
-from src.transcription import Transcriber, create_transcriber, get as get_model_spec, normalize_id
+from src.transcription import Transcriber, create_transcriber, normalize_id
 from src.transcription.registry import MODELS as _REGISTERED_MODELS
-from src.processing import GrammarProcessor
 from src.input import HotkeyListener, paste_text, copy_to_clipboard
 from src.config import ConfigStore
 from src.ui_bridge import UIBridge
@@ -32,12 +31,9 @@ from src.activity import ActivityStore
 class LogNotesController:
     """Main controller that orchestrates all components."""
 
-    GRAMMAR_AVAILABILITY_TTL_SEC = 30.0
-
     def __init__(self):
         # Core components
         self._recorder = AudioRecorder()
-        self._vad = VoiceActivityDetector()
         self._transcriber: Optional[Transcriber] = None
         self._transcriber_model_id: Optional[str] = None
         # Cache of warmed, ready-to-use transcriber instances keyed by model id.
@@ -45,9 +41,6 @@ class LogNotesController:
         # Activity tab don't pay the 2-5s model-load cost.
         self._warm_transcribers: dict[str, Transcriber] = {}
         self._warm_lock = threading.Lock()
-        self._grammar: Optional[GrammarProcessor] = None
-        self._grammar_available: Optional[bool] = None
-        self._grammar_available_checked_at: float = 0.0
         self._hotkey: Optional[HotkeyListener] = None
         self._audio_error_notified = False
 
@@ -140,14 +133,10 @@ class LogNotesController:
         background so Activity-tab retries are instant.
 
         Runs after the primary model is ready. One model at a time to avoid
-        thrashing RAM or stalling the primary path. Parakeet (if enabled by
-        the user) is skipped — its download is large and loading is slow
-        enough that we don't want it in an automatic warm-up.
+        thrashing RAM or stalling the primary path.
         """
         for spec in _REGISTERED_MODELS:
             if spec.id == primary_model_id:
-                continue
-            if spec.backend != "whisper":
                 continue
             with self._warm_lock:
                 if spec.id in self._warm_transcribers:
@@ -163,54 +152,13 @@ class LogNotesController:
             except Exception as e:
                 logger.warning(f"Background warm-up failed for {spec.id}: {e}")
 
-    def _init_grammar(self, model: str = "llama3.2:1b"):
-        """Initialize the grammar processor."""
-        if self._grammar is None:
-            host = self._config.get("ollama_host")
-            self._grammar = GrammarProcessor(model=model, host=host)
-            self._grammar_available = None
-            self._grammar_available_checked_at = 0.0
-
-    def _grammar_is_available(self, force_refresh: bool = False) -> bool:
-        """Check Ollama availability with a short-lived in-memory cache."""
-        if self._grammar is None:
-            return False
-
-        now = time.perf_counter()
-        should_refresh = (
-            force_refresh
-            or self._grammar_available is None
-            or (now - self._grammar_available_checked_at) > self.GRAMMAR_AVAILABILITY_TTL_SEC
-        )
-        if not should_refresh:
-            return bool(self._grammar_available)
-
-        self._grammar_available = self._grammar.is_available()
-        self._grammar_available_checked_at = now
-        return bool(self._grammar_available)
-
     def _prepare_audio_for_model(self, audio, model_id: str):
-        """Apply backend-specific pre-processing before transcription."""
-        model_spec = get_model_spec(model_id)
+        """Apply backend-specific pre-processing before transcription.
 
-        # faster-whisper already runs VAD internally in whisper.py.
-        if model_spec.backend == "whisper":
-            return audio
-
-        self._ui.set_status("processing", "Filtering silence...")
-        original_samples = len(audio)
-        try:
-            filtered = self._vad.filter_silence(audio)
-            self._vad.reset()
-            logger.info(
-                f"VAD: {original_samples} samples in, "
-                f"{len(filtered)} samples after silence filter "
-                f"({len(filtered)/16000:.1f}s of speech)"
-            )
-            return filtered
-        except Exception as e:
-            logger.warning(f"VAD failed, using raw audio: {e}")
-            return audio
+        The only backend is Whisper, which runs VAD internally (see whisper.py),
+        so no external pre-processing is needed.
+        """
+        return audio
 
     def _on_hotkey_press(self):
         """Handle hotkey press - start or stop recording depending on mode."""
@@ -278,7 +226,6 @@ class LogNotesController:
         try:
             total_t0 = time.perf_counter()
             preprocess_ms = 0.0
-            grammar_ms = 0.0
             paste_ms = 0.0
             self._ui.set_status("processing", "Processing audio...")
 
@@ -308,14 +255,6 @@ class LogNotesController:
             # Initialise components
             self._ui.set_status("processing", "Transcribing...")
             self._init_transcriber(model_id)
-            grammar_enabled = self._config["enable_grammar"]
-            grammar_available = False
-
-            if grammar_enabled:
-                self._init_grammar(self._config["ollama_model"])
-                grammar_available = self._grammar_is_available()
-                if not grammar_available:
-                    logger.warning("Grammar cleanup enabled but Ollama is not available - skipping")
 
             # --- Checkpoint pasting ---
             # Accumulate Whisper segments into sentence-sized chunks, then
@@ -337,11 +276,7 @@ class LogNotesController:
 
                 # Flush when the accumulated text ends at a sentence boundary
                 if combined.rstrip() and combined.rstrip()[-1] in SENTENCE_ENDINGS:
-                    grammar_t0 = time.perf_counter()
-                    flushed = self._flush_chunk(
-                        combined, grammar_enabled, grammar_available
-                    )
-                    grammar_ms += (time.perf_counter() - grammar_t0) * 1000.0
+                    flushed = combined
                     paste_t0 = time.perf_counter()
                     success = paste_text(flushed, clear_clipboard=False)
                     paste_ms += (time.perf_counter() - paste_t0) * 1000.0
@@ -360,12 +295,7 @@ class LogNotesController:
 
             # Flush any remaining segments that didn't end on a sentence boundary
             if chunk_segments:
-                combined = " ".join(chunk_segments)
-                grammar_t0 = time.perf_counter()
-                flushed = self._flush_chunk(
-                    combined, grammar_enabled, grammar_available
-                )
-                grammar_ms += (time.perf_counter() - grammar_t0) * 1000.0
+                flushed = " ".join(chunk_segments)
                 paste_t0 = time.perf_counter()
                 success = paste_text(flushed, clear_clipboard=True)  # final chunk: clear clipboard
                 paste_ms += (time.perf_counter() - paste_t0) * 1000.0
@@ -388,7 +318,6 @@ class LogNotesController:
                 self._ui.set_status("ready", "No text transcribed")
                 self._record_activity(
                     retained_audio, combined_text,
-                    grammar_enabled and grammar_available,
                     paste_succeeded=False,
                     error="No text transcribed",
                 )
@@ -400,14 +329,13 @@ class LogNotesController:
             logger.info(
                 "Timing (ms): "
                 f"capture={capture_ms:.0f}, preprocess={preprocess_ms:.0f}, "
-                f"transcribe={transcribe_ms:.0f}, grammar={grammar_ms:.0f}, "
+                f"transcribe={transcribe_ms:.0f}, "
                 f"paste={paste_ms:.0f}, total={(time.perf_counter() - total_t0) * 1000.0:.0f}, "
                 f"model={model_id}"
             )
             self._set_transient_status("Transcribed")
             self._record_activity(
                 retained_audio, combined_text,
-                grammar_enabled and grammar_available,
                 paste_succeeded=not any_paste_failed,
             )
 
@@ -418,31 +346,10 @@ class LogNotesController:
         finally:
             self._is_processing = False
 
-    def _flush_chunk(
-        self,
-        text: str,
-        grammar_enabled: bool,
-        grammar_available: bool
-    ) -> str:
-        """Apply grammar cleanup to a text chunk if enabled, else return as-is."""
-        if not grammar_enabled or not grammar_available:
-            return text
-        try:
-            self._ui.set_status("processing", "Fixing grammar...")
-            cleaned = self._grammar.cleanup(text)
-            logger.info(
-                f"Grammar cleanup: {len(text)} -> {len(cleaned)} chars"
-            )
-            return cleaned
-        except Exception as e:
-            logger.warning(f"Grammar cleanup failed for chunk, using raw text: {e}")
-            return text
-
     def _record_activity(
         self,
         audio,
         text: str,
-        grammar_applied: bool,
         paste_succeeded: bool,
         error: Optional[str] = None,
     ):
@@ -452,7 +359,6 @@ class LogNotesController:
                 audio=audio,
                 text=text,
                 whisper_model=self._config["whisper_model"],
-                grammar_applied=grammar_applied,
                 paste_succeeded=paste_succeeded,
                 error=error,
             )
@@ -528,12 +434,6 @@ class LogNotesController:
 
             new_text = " ".join(parts).strip()
 
-            if entry.grammar_applied and self._grammar and self._grammar_is_available():
-                try:
-                    new_text = self._grammar.cleanup(new_text)
-                except Exception as e:
-                    logger.warning(f"Retry: grammar cleanup failed: {e}")
-
             self._activity.update(
                 entry_id, text=new_text, whisper_model=model_id, error=None,
             )
@@ -567,16 +467,6 @@ class LogNotesController:
             self._init_transcriber(new_model)
         except Exception as e:
             logger.warning(f"Could not pre-initialize model '{new_model}': {e}")
-
-    def _on_grammar_toggled(self, enabled: bool):
-        """Handle grammar toggle from UI."""
-        if not enabled:
-            return
-        try:
-            self._init_grammar(self._config["ollama_model"])
-            self._grammar_is_available(force_refresh=True)
-        except Exception as e:
-            logger.warning(f"Could not initialize grammar after toggle: {e}")
 
     def _on_theme_changed(self, theme: str):
         """Handle theme change from UI."""
@@ -630,7 +520,7 @@ class LogNotesController:
         self._hotkey.start()
 
         # Pre-load models in background (optional, improves first-use latency).
-        # Phase 1: load the configured model + grammar so live capture is ready.
+        # Phase 1: load the configured model so live capture is ready.
         # Phase 2: warm the remaining Whisper sizes so Activity-tab retries with
         # a different model don't pay the cold-load cost.
         def preload():
@@ -642,8 +532,6 @@ class LogNotesController:
                 # transcription doesn't pay the 5-8s cold-load cost.
                 if hasattr(self._transcriber, "load"):
                     self._transcriber.load()
-                self._init_grammar(self._config["ollama_model"])
-                self._grammar_is_available(force_refresh=True)
                 self._ui.set_status("ready", "Ready")
             except Exception as e:
                 logger.warning(f"Preload warning: {e}")

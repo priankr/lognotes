@@ -2,14 +2,13 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)
 ![Whisper](https://img.shields.io/badge/Whisper-faster--whisper-412991?style=flat)
-![Ollama](https://img.shields.io/badge/Ollama-grammar%20cleanup-222222?style=flat)
 ![UI](https://img.shields.io/badge/UI-Electron-47848F?style=flat&logo=electron&logoColor=white)
-![Audio](https://img.shields.io/badge/Audio-sounddevice%20%7C%20Silero%20VAD-E95420?style=flat)
+![Audio](https://img.shields.io/badge/Audio-sounddevice-E95420?style=flat)
 ![Hotkeys](https://img.shields.io/badge/Hotkeys-pynput-4CAF50?style=flat)
 
 LogNotes is a lightweight, local speech-to-text application that transcribes your recorded notes and pastes the result wherever your cursor is placed. It's primarily designed to "log" short notes. I use it quite often when instructing coding agents (e.g, when providing feedback, describing bugs, or outlining requirements).
 
-The app uses Whisper for transcription and Ollama for optional grammar cleanup. NVIDIA Parakeet (via ONNX Runtime) is supported as an opt-in alternative. The current version is still very much a work in progress, but I'll definitely be working on further improvements.
+The app uses Whisper for transcription. The current version is still very much a work in progress, but I'll definitely be working on further improvements.
 
 LogNotes is built as an **Electron front end** (the UI) over a **Python back end** that runs the ML pipeline and OS integration. See [ARCHITECTURE.md](ARCHITECTURE.md) for how it all fits together.
 
@@ -23,7 +22,6 @@ When looking into open source solutions, I came across [Handy](https://github.co
 
 - Python 3.10+ (the back-end ML pipeline)
 - Node.js 18+ (the Electron front end)
-- Ollama (optional, for grammar cleanup)
 
 ## Installation
 
@@ -49,14 +47,6 @@ cd electron
 npm install
 ```
 
-### 3. Set Up Ollama (Optional, for Grammar Cleanup)
-
-```bash
-# Install Ollama from https://ollama.ai
-# Then pull the model:
-ollama pull llama3.2:1b
-```
-
 ## Desktop App
 
 LogNotes is an Electron app with a Python back end. Build a Windows installer with `build\build-electron.ps1` (produces `dist-electron\LogNotes Setup *.exe`).
@@ -73,8 +63,7 @@ LogNotes is an Electron app with a Python back end. Build a Windows installer wi
 
 - **Local Processing** - All transcription happens on your machine. Silence is automatically filtered out.
 - **Flexible Recording Modes** - Choose between Hold mode (press and hold) or Toggle mode (click to start/stop). 
-- **Grammar Cleanup** - Optional post-processing with local LLM (Ollama). When this is enabled the transcription speed may be noticeably lower. 
-- **Whisper Transcription** - Choose between Whisper tiny / base / small. CUDA is auto-detected and used when available. 
+- **Whisper Transcription** - Choose between Whisper base / small. CUDA is auto-detected and used when available. 
 - **Session Activity Tab** - Every transcription this session is retained in RAM so you can retry it with a different model, copy the text, or delete it. 
 - **Always-Visible Recording Overlay** - Small borderless status indicator pinned to a screen corner; drag to reposition, right-click to cycle corners.
 - **Checkpoint Pasting** - Sentences are pasted as soon as Whisper finishes each one, so partial text is preserved if processing fails mid-stream
@@ -83,8 +72,7 @@ LogNotes is an Electron app with a Python back end. Build a Windows installer wi
 ### Key Security Features
 
 - **No Audio Storage** - Recordings are held in memory only during the app session and never written to disk. The Activity tab keeps recent clips in RAM so you can retry a transcription with a different model. Everything is cleared on app close
-- **Model Name Validation** - Ollama model names are validated against an allowed-characters pattern at both config load and runtime model switches.
-- **Config Validation** - All configuration values are validated against whitelists on load; the Ollama host URL is verified to have a valid scheme and non-empty hostname.
+- **Config Validation** - All configuration values are validated against whitelists on load.
 - **Atomic Config Permissions** - The config file is created with `0o600` permissions in a single `os.open()` call, with no readable window between creation and `chmod`.
 - **Bounded Activity Memory** - The session audio cap is enforced before adding each new entry, preventing a single long recording from temporarily spiking RAM past the limit.
 - **Pinned Model Versions** - External model downloads use pinned versions.
@@ -134,9 +122,8 @@ LogNotes/
 │   ├── config.py             # Schema, validation, 0o600 save, ConfigStore
 │   ├── activity.py           # In-memory ActivityStore (session-scoped)
 │   ├── paths.py              # User data / cache dir + bundled-asset resolution
-│   ├── audio/                # recorder.py (sounddevice), vad.py (Silero)
-│   ├── transcription/        # registry.py, whisper.py, parakeet.py, device.py
-│   ├── processing/grammar.py # Grammar cleanup (Ollama)
+│   ├── audio/                # recorder.py (sounddevice)
+│   ├── transcription/        # registry.py, whisper.py, device.py
 │   ├── input/                # hotkey.py (pynput), paster.py (paste/clipboard)
 │   └── ui/                   # Legacy Tk UI (reference only; entry main.py)
 ├── build/                    # PyInstaller specs + build-electron.ps1
@@ -152,20 +139,17 @@ LogNotes/
 |-----------|---------|
 | Front end | Electron |
 | Back-end IPC | WebSocket (loopback) |
-| Transcription (default) | faster-whisper |
-| Transcription (optional, opt-in) | onnx-asr + ONNX Runtime (Parakeet) |
-| Voice Activity Detection | Silero VAD (via torch) |
+| Transcription | faster-whisper |
 | Audio Recording | sounddevice |
 | Global Hotkeys | pynput |
 | Text Pasting | pynput + pyperclip |
-| Grammar Cleanup | Ollama Python client |
 
 
 ## Documentation
 
 - [Architecture](ARCHITECTURE.md) — The full picture: the Electron + Python-back-end split, the transcription pipeline, the IPC protocol, module layout, packaging, and the security model.
 - [Configuration](documentation/configuration.md) — Covers the config file location, full settings schema, valid values for each option, and the validation rules applied on load.
-- [Troubleshooting](documentation/troubleshooting.md) — Step-by-step fixes for common issues including hotkeys not firing, audio problems, transcription quality, Ollama connectivity, and packaged build failures.
+- [Troubleshooting](documentation/troubleshooting.md) — Step-by-step fixes for common issues including hotkeys not firing, audio problems, transcription quality, and packaged build failures.
 
 ## Disclaimer
 

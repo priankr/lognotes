@@ -12,10 +12,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 from pathlib import Path
 from typing import Any, Callable, Optional
-from urllib.parse import urlparse
 
 from .paths import user_data_dir
 from .transcription import (
@@ -31,9 +29,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG: dict[str, Any] = {
     "hotkey": "ctrl+shift+d",
     "whisper_model": _DEFAULT_MODEL_ID,
-    "enable_grammar": True,
-    "ollama_model": "llama3.2:1b",
-    "ollama_host": "http://localhost:11434",
     "theme": "dark",
     "push_to_talk_mode": "hold",
     "overlay_corner": "bottom-right",
@@ -43,8 +38,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
 ALLOWED_WHISPER_MODELS = set(_all_model_ids())
 ALLOWED_MODIFIERS = {"ctrl", "shift", "alt", "cmd"}
 ALLOWED_CORNERS = {"top-left", "top-right", "bottom-left", "bottom-right"}
-# Valid Ollama model names (alphanumeric, dots, colons, hyphens).
-OLLAMA_MODEL_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]*$")
 
 # Config file path. LOGNOTES_CONFIG_FILE overrides it — used by tests and the
 # sidecar's NO_RUNTIME mode to avoid touching the user's real config.
@@ -75,28 +68,6 @@ def validate_config(config: dict) -> dict:
             validated["hotkey"] = "+".join(modifiers + keys)
         else:
             logger.warning(f"Invalid hotkey '{hotkey}', using default")
-
-    if isinstance(config.get("enable_grammar"), bool):
-        validated["enable_grammar"] = config["enable_grammar"]
-
-    ollama_host = config.get("ollama_host", "")
-    if isinstance(ollama_host, str) and ollama_host and len(ollama_host) <= 256:
-        try:
-            _parsed = urlparse(ollama_host)
-            if _parsed.scheme in ("http", "https") and _parsed.netloc:
-                validated["ollama_host"] = ollama_host
-            else:
-                logger.warning(f"Invalid ollama_host '{ollama_host}', using default")
-        except Exception:
-            logger.warning(f"Invalid ollama_host '{ollama_host}', using default")
-    elif ollama_host:
-        logger.warning(f"Invalid ollama_host '{ollama_host}', using default")
-
-    ollama_model = config.get("ollama_model", "")
-    if ollama_model and OLLAMA_MODEL_PATTERN.match(ollama_model) and len(ollama_model) <= 100:
-        validated["ollama_model"] = ollama_model
-    else:
-        logger.warning(f"Invalid ollama_model '{ollama_model}', using default")
 
     if config.get("theme") in ["dark", "light"]:
         validated["theme"] = config["theme"]
@@ -135,25 +106,6 @@ def _v_hotkey(value: Any) -> tuple[bool, Any]:
     return False, value
 
 
-def _v_enable_grammar(value: Any) -> tuple[bool, Any]:
-    return isinstance(value, bool), value
-
-
-def _v_ollama_host(value: Any) -> tuple[bool, Any]:
-    if not (isinstance(value, str) and value and len(value) <= 256):
-        return False, value
-    try:
-        parsed = urlparse(value)
-        return (parsed.scheme in ("http", "https") and bool(parsed.netloc)), value
-    except Exception:
-        return False, value
-
-
-def _v_ollama_model(value: Any) -> tuple[bool, Any]:
-    ok = bool(value) and bool(OLLAMA_MODEL_PATTERN.match(str(value))) and len(str(value)) <= 100
-    return ok, value
-
-
 def _v_theme(value: Any) -> tuple[bool, Any]:
     return value in ("dark", "light"), value
 
@@ -169,9 +121,6 @@ def _v_overlay_corner(value: Any) -> tuple[bool, Any]:
 _KEY_VALIDATORS = {
     "whisper_model": _v_whisper_model,
     "hotkey": _v_hotkey,
-    "enable_grammar": _v_enable_grammar,
-    "ollama_host": _v_ollama_host,
-    "ollama_model": _v_ollama_model,
     "theme": _v_theme,
     "push_to_talk_mode": _v_ptt_mode,
     "overlay_corner": _v_overlay_corner,

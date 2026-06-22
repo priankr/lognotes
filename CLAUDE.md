@@ -2,7 +2,7 @@
 
 **Repository:** https://github.com/priankr/lognotes
 
-Local speech-to-text dictation app. Push-to-talk hotkey → Whisper transcribes → optional Ollama grammar cleanup → paste at cursor. Settings / Activity / Logs tabs and a draggable recording overlay.
+Local speech-to-text dictation app. Push-to-talk hotkey → Whisper transcribes → paste at cursor. Settings / Activity / Logs tabs and a draggable recording overlay.
 
 LogNotes is a **hybrid app**: an **Electron front end** (UI) over a **Python back end** (the "sidecar") that runs the ML pipeline and OS integration. They are separate processes talking over a loopback WebSocket. The ML stack stays in Python because there is no production-quality JS equivalent.
 
@@ -13,18 +13,16 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full architecture (pipeline, IPC 
 - **App (Electron):** `cd electron && npm start` — spawns the Python back end ([sidecar.py](sidecar.py)) and connects over a loopback WebSocket.
 - **Back end alone (headless):** `python sidecar.py`.
 - **Packaged:** `build\build-electron.ps1` → `dist-electron\LogNotes Setup *.exe` (bundles the back end as `dist\LogNotes\LogNotes.exe`).
-- **Ollama** must be running separately (`ollama serve`) for grammar cleanup.
 
 ## Layout
 
-- [src/controller.py](src/controller.py) — `LogNotesController`, the front-end-agnostic orchestrator (recorder → VAD → Whisper → grammar → paste). Talks to the UI only via an injected `UIBridge` / `ConfigStore` / `ActivityStore`.
+- [src/controller.py](src/controller.py) — `LogNotesController`, the front-end-agnostic orchestrator (recorder → Whisper → paste). Talks to the UI only via an injected `UIBridge` / `ConfigStore` / `ActivityStore`.
 - [sidecar.py](sidecar.py) — `SidecarServer`: WebSocket + RPC server wrapping the controller; `HeadlessBridge` forwards UI calls as events.
 - [src/ui_bridge.py](src/ui_bridge.py) — `UIBridge` protocol the controller talks through.
 - [src/config.py](src/config.py) — schema, whitelist validation, `0o600` save, `ConfigStore`.
 - [src/activity.py](src/activity.py) — in-memory `ActivityStore` (session-scoped, audio in RAM only).
-- [src/transcription/](src/transcription/) — faster-whisper, opt-in Parakeet (ONNX), model registry, CUDA detection.
-- [src/audio/](src/audio/) — `AudioRecorder` (sounddevice), `VoiceActivityDetector` (Silero via torch).
-- [src/processing/grammar.py](src/processing/grammar.py) — Ollama client with prompt-injection isolation.
+- [src/transcription/](src/transcription/) — faster-whisper, model registry, CUDA detection.
+- [src/audio/](src/audio/) — `AudioRecorder` (sounddevice).
 - [src/input/](src/input/) — `HotkeyListener` (pynput), `paste_text` / `copy_to_clipboard`.
 - [src/paths.py](src/paths.py) — dev-vs-frozen asset resolution + user data/cache dirs.
 - [electron/](electron/) — `main.js` (process spawn, tray, lifecycle), `preload.js` (bridge), `renderer/` (tabs + overlay).

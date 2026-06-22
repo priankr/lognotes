@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LogNotes (legacy Tk front end) - Local speech-to-text with grammar cleanup.
+LogNotes (legacy Tk front end) - Local speech-to-text dictation.
 
 Kept locally for reference. The canonical product is the Electron app
 (electron/ + sidecar.py); both share LogNotesController, which now lives in
@@ -30,6 +30,22 @@ from src.paths import user_cache_dir
 _cache = user_cache_dir()
 os.environ.setdefault("HF_HOME", str(_cache / "hf"))
 os.environ.setdefault("TORCH_HOME", str(_cache / "torch"))
+# huggingface_hub defaults to symlinking blobs into the snapshot dir, which on
+# Windows needs Developer Mode or admin (else WinError 1314). Force copies so
+# any HuggingFace model download works on a standard user account.
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+# Use the OS certificate store (Windows) for TLS so model downloads work behind
+# corporate SSL-inspection proxies, whose CA is trusted by the OS but not by
+# certifi's bundle. Must run before requests/huggingface_hub import. Best-effort:
+# a stock network is unaffected, and a failure here must not block startup.
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except Exception:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +62,6 @@ def run(controller: LogNotesController) -> None:
     # Set up callbacks
     app.on_hotkey_changed = controller._on_hotkey_changed
     app.on_model_changed = controller._on_model_changed
-    app.on_grammar_toggled = controller._on_grammar_toggled
     app.on_theme_changed = controller._on_theme_changed
     app.on_push_to_talk_mode_changed = controller._on_push_to_talk_mode_changed
     app.on_toggle_recording = controller.toggle_recording

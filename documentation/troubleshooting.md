@@ -41,10 +41,9 @@
 
 ## Transcription Quality Is Poor
 
-- Switch to a larger model: **tiny → base → small**. `small` offers the best quality/speed tradeoff on CPU.
+- Switch to a larger model: **base → small**. `small` offers the best quality/speed tradeoff on CPU.
 - Speak closer to the microphone and reduce background noise.
 - Speak at a natural pace — very fast or very slow speech can confuse the model.
-- If grammar cleanup is enabled and changing the meaning of text, try disabling it in Settings.
 
 ---
 
@@ -54,16 +53,6 @@
 - Left-click and drag to reposition manually.
 - The corner is persisted in config; the exact drag position is not — it resets to the configured corner on restart.
 - The overlay is positioned within the primary display's work area to avoid the taskbar, but secondary monitors with non-standard taskbar positions may still cause overlap. Switch corners to work around it.
-
----
-
-## Ollama Not Available
-
-- Ensure Ollama is running: `ollama serve` (check with `ollama list`).
-- Confirm the model is pulled: `ollama pull llama3.2:1b`.
-- If Ollama is running on a non-default port or host, update `ollama_host` in `%APPDATA%\LogNotes\config.json` — it is not exposed in the UI. See [configuration.md](configuration.md).
-- Grammar cleanup is skipped silently when Ollama is unavailable — transcription still works normally.
-- The Logs tab will show "Grammar cleanup enabled but Ollama is not available" when this happens.
 
 ---
 
@@ -115,15 +104,3 @@ the Python back end.
 - First launch is slow (models load); give it time before assuming it is stuck.
 - Make sure no orphaned `LogNotes.exe` from a previous run is interfering
   (Task Manager).
-
----
-
-## Enabling Parakeet (Optional)
-
-The Parakeet backend (NVIDIA's open ASR model family via ONNX Runtime) is wired end-to-end but disabled by default — in testing it offered no quality advantage over Whisper small while adding a ~1.2 GB first-run download. To enable:
-
-1. Uncomment the `ModelSpec(...)` line for `parakeet-v3` in [src/transcription/registry.py](../src/transcription/registry.py).
-2. Uncomment `onnx-asr[hub]>=0.6.0` in [requirements.txt](../requirements.txt) and run `pip install -r requirements.txt`.
-3. **Packaged builds only:** add `"onnxruntime", "onnx_asr"` to `_BUNDLE_PKGS` in [build/LogNotes.spec](../build/LogNotes.spec) and rebuild.
-
-Parakeet is only practical with CUDA — GPU is auto-detected at runtime. Other supported models (`nemo-parakeet-tdt-0.6b-v2`, `nemo-canary-*`) also work; see [src/transcription/parakeet.py](../src/transcription/parakeet.py) for the id mapping.

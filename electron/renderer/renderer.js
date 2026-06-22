@@ -11,8 +11,6 @@ const els = {
   hotkeyChange: document.getElementById('hotkey-change'),
   hotkeyError: document.getElementById('hotkey-error'),
   modelSelect: document.getElementById('model-select'),
-  grammarToggle: document.getElementById('grammar-toggle'),
-  ollamaModel: document.getElementById('ollama-model'),
   activityList: document.getElementById('activity-list'),
   activityClear: document.getElementById('activity-clear'),
   logsOutput: document.getElementById('logs-output'),
@@ -108,12 +106,6 @@ function applyConfigField(key, value) {
         break;
       case 'whisper_model':
         els.modelSelect.value = value;
-        break;
-      case 'enable_grammar':
-        els.grammarToggle.checked = !!value;
-        break;
-      case 'ollama_model':
-        els.ollamaModel.textContent = `Model: ${value}`;
         break;
       case 'push_to_talk_mode':
         for (const r of document.querySelectorAll('input[name="ptt"]')) {
@@ -276,11 +268,6 @@ function wireSettingsHandlers() {
   els.modelSelect.addEventListener('change', () => {
     if (loadingConfig) return;
     saveConfig('whisper_model', els.modelSelect.value).catch(() => {});
-  });
-
-  els.grammarToggle.addEventListener('change', () => {
-    if (loadingConfig) return;
-    saveConfig('enable_grammar', els.grammarToggle.checked).catch(() => {});
   });
 
   for (const r of document.querySelectorAll('input[name="ptt"]')) {

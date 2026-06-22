@@ -34,7 +34,6 @@ class ActivityEntry:
     audio: np.ndarray
     text: str
     whisper_model: str
-    grammar_applied: bool
     paste_succeeded: bool
     error: Optional[str] = field(default=None)
 
@@ -71,7 +70,6 @@ class ActivityStore:
         audio: np.ndarray,
         text: str,
         whisper_model: str,
-        grammar_applied: bool,
         paste_succeeded: bool,
         error: Optional[str] = None,
     ) -> ActivityEntry:
@@ -82,7 +80,6 @@ class ActivityStore:
                 audio=audio,
                 text=text,
                 whisper_model=whisper_model,
-                grammar_applied=grammar_applied,
                 paste_succeeded=paste_succeeded,
                 error=error,
             )

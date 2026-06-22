@@ -18,9 +18,6 @@ def create_transcriber(model_id: str) -> Transcriber:
     spec = get(model_id)
     if spec.backend == "whisper":
         return WhisperTranscriber(model_size=spec.backend_arg)
-    if spec.backend == "parakeet":
-        from .parakeet import ParakeetTranscriber
-        return ParakeetTranscriber(model_id=spec.backend_arg)
     raise ValueError(f"Unknown backend: {spec.backend}")
 
 

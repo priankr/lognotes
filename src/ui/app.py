@@ -251,7 +251,6 @@ class LogNotesApp(ttk.Window):
         # Callbacks (set by controller)
         self.on_hotkey_changed: Optional[Callable[[str], None]] = None
         self.on_model_changed: Optional[Callable[[str], None]] = None
-        self.on_grammar_toggled: Optional[Callable[[bool], None]] = None
         self.on_theme_changed: Optional[Callable[[str], None]] = None
         self.on_push_to_talk_mode_changed: Optional[Callable[[str], None]] = None
         self.on_toggle_recording: Optional[Callable[[], None]] = None
@@ -525,29 +524,6 @@ class LogNotesApp(ttk.Window):
             model_inner, text="(all sizes preloaded in the background; small is the quality/speed sweet spot on CPU)",
             font=("Segoe UI", 8), foreground="gray",
         ).pack(side=tk.LEFT, padx=(10, 0))
-
-        # Grammar section
-        grammar_frame = ttk.LabelFrame(main_frame, text="Grammar Cleanup")
-        grammar_frame.pack(fill=tk.X, pady=(0, 15))
-
-        grammar_inner = ttk.Frame(grammar_frame, padding=15)
-        grammar_inner.pack(fill=tk.BOTH, expand=True)
-
-        self._grammar_var = tk.BooleanVar(value=self._config["enable_grammar"])
-        grammar_check = ttk.Checkbutton(
-            grammar_inner,
-            text="Enable grammar cleanup",
-            variable=self._grammar_var,
-            command=self._on_grammar_toggle
-        )
-        grammar_check.pack(anchor=tk.W)
-
-        model_label = ttk.Label(
-            grammar_inner,
-            text=f"Model: {self._config['ollama_model']}",
-            font=("Segoe UI", 9)
-        )
-        model_label.pack(anchor=tk.W, padx=(20, 0), pady=(5, 0))
 
         # Theme toggle
         theme_frame = ttk.LabelFrame(main_frame, text="Appearance")
@@ -899,13 +875,6 @@ class LogNotesApp(ttk.Window):
         self._save_config()
         if self.on_model_changed:
             self.on_model_changed(new_model)
-
-    def _on_grammar_toggle(self):
-        enabled = self._grammar_var.get()
-        self._config["enable_grammar"] = enabled
-        self._save_config()
-        if self.on_grammar_toggled:
-            self.on_grammar_toggled(enabled)
 
     def _on_theme_change(self):
         new_theme = self._theme_var.get()

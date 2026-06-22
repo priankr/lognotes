@@ -78,7 +78,9 @@ function startSidecar() {
 
     sidecarProc = spawn(command, args, {
       cwd,
-      env: { ...process.env, LOGNOTES_SIDECAR_PORT: '0' },
+      // LOGNOTES_PARENT_PID lets the sidecar self-terminate if we are hard-killed
+      // (Task Manager / OS / crash), where no JS exit handler runs to stop it.
+      env: { ...process.env, LOGNOTES_SIDECAR_PORT: '0', LOGNOTES_PARENT_PID: String(process.pid) },
     });
 
     let settled = false;
@@ -134,10 +136,30 @@ function startSidecar() {
   });
 }
 
+// Kill the sidecar reliably, including any child processes. On Windows a frozen
+// PyInstaller exe can spawn helper children and `proc.kill()` only signals the
+// top process, leaving orphans that hold their old WebSocket port and confuse
+// the next launch's handshake (manifesting as a "Disconnected" UI). Use
+// taskkill /T to tear down the whole tree. Called from every exit path so a
+// hide-to-tray-then-quit, a crash, or a hard process exit can't orphan it.
 function stopSidecar() {
-  if (sidecarProc) {
-    sidecarProc.kill();
-    sidecarProc = null;
+  if (!sidecarProc) return;
+  const pid = sidecarProc.pid;
+  sidecarProc = null;
+  if (pid == null) return;
+  if (process.platform === 'win32') {
+    try {
+      // /T kills the process tree, /F forces it. spawnSync so it completes
+      // before the app fully exits (an async kill can be cut short).
+      require('child_process').spawnSync('taskkill', ['/PID', String(pid), '/T', '/F']);
+    } catch {
+      // Fall through to a best-effort signal below.
+    }
+  }
+  try {
+    process.kill(pid);
+  } catch {
+    // Already gone (e.g. taskkill handled it) — nothing to do.
   }
 }
 
@@ -368,3 +390,10 @@ app.on('before-quit', () => {
   isQuitting = true;
   stopSidecar();
 });
+
+// Belt-and-suspenders: `will-quit` fires after `before-quit` on the normal quit
+// path, but also on paths a missed `before-quit` wouldn't cover. `process.exit`
+// is the last-resort hook for a hard teardown so the sidecar is never orphaned
+// (orphans hold their old port and break the next launch's handshake).
+app.on('will-quit', stopSidecar);
+process.on('exit', stopSidecar);

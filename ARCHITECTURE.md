@@ -1,8 +1,8 @@
 # Architecture
 
 LogNotes is a local speech-to-text dictation app: a push-to-talk hotkey records
-audio, Whisper transcribes it, an optional Ollama pass cleans up grammar, and the
-result is pasted at the cursor. This document describes how the app is built.
+audio, Whisper transcribes it, and the result is pasted at the cursor. This
+document describes how the app is built.
 
 ## High-Level Shape
 
@@ -10,9 +10,9 @@ LogNotes is a **hybrid app**: an **Electron front end** for the UI and a
 **Python back end** (the "sidecar") for the ML pipeline and OS integration. They
 run as separate processes and communicate over a loopback WebSocket.
 
-The split exists because the valuable part of the app — Whisper/Parakeet
-inference (`ctranslate2` / `faster-whisper`), voice-activity detection (Silero on
-`torch`), global hotkeys (`pynput`), and paste-at-cursor — has no
+The split exists because the valuable part of the app — Whisper
+inference (`ctranslate2` / `faster-whisper`), global hotkeys (`pynput`),
+and paste-at-cursor — has no
 production-quality JavaScript equivalent, so it stays in Python. Electron owns
 only the UI (windows, tabs, overlay, tray). Electron does not change transcription
 latency; the pipeline is identical to what a pure-Python build would run.
@@ -35,7 +35,7 @@ latency; the pipeline is identical to what a pure-Python build would run.
 ┌──────────────────────────────────────────────────────────────┐
 │             Python back end (sidecar.py)                     │
 │    SidecarServer + LogNotesController (src/controller.py)     │
-│    - hotkey (pynput), recorder, VAD, ASR, grammar, paste     │
+│    - hotkey (pynput), recorder, Whisper ASR, paste           │
 │    - ConfigStore, ActivityStore, log ring buffer             │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -47,16 +47,15 @@ streaming pipeline regardless of which front end is attached:
 
 1. **Capture** — the hotkey press starts the recorder; release (hold mode) or a
    second press (toggle mode) stops it.
-2. **Preprocess** — backend-specific. Whisper uses `faster-whisper`'s internal
-   VAD; other backends run Silero VAD first to strip silence.
-3. **Transcribe** — the ASR backend yields text segments as they decode.
-4. **Checkpoint paste** — segments are accumulated until a sentence boundary
-   (`.?!`), then that chunk is grammar-cleaned (if enabled) and pasted
-   immediately. This means partial output survives if processing fails mid-stream.
-5. **Clipboard hygiene** — mid-stream chunks paste without clearing the clipboard
+2. **Transcribe** — Whisper (`faster-whisper`, with its internal VAD) yields text
+   segments as they decode.
+3. **Checkpoint paste** — segments are accumulated until a sentence boundary
+   (`.?!`), then that chunk is pasted immediately. This means partial output
+   survives if processing fails mid-stream.
+4. **Clipboard hygiene** — mid-stream chunks paste without clearing the clipboard
    (a 150 ms guard prevents the next chunk overwriting before the target app
    reads it); the final chunk clears the clipboard 5 s after paste.
-6. **Record activity** — the session audio + final text are stored in memory for
+5. **Record activity** — the session audio + final text are stored in memory for
    the Activity tab (retryable with a different model).
 
 ## Process & IPC
@@ -99,9 +98,8 @@ coupling and the back end imports no UI framework.
 | UI contract | [src/ui_bridge.py](src/ui_bridge.py) | `UIBridge` protocol (`set_status`, `show_audio_error`). |
 | Config | [src/config.py](src/config.py) | Schema, whitelist validation, `0o600` save, `ConfigStore`, single-key `validate_value()`. |
 | Activity | [src/activity.py](src/activity.py) | In-memory `ActivityStore` + `ActivityEntry` (audio held in RAM only). |
-| Transcription | [src/transcription/](src/transcription/) | `whisper.py` (faster-whisper), `parakeet.py` (opt-in ONNX), `registry.py` (model registry), `device.py` (CUDA detection). |
-| Audio | [src/audio/](src/audio/) | `recorder.py` (sounddevice), `vad.py` (Silero via torch). |
-| Grammar | [src/processing/grammar.py](src/processing/grammar.py) | Ollama client with prompt-injection isolation. |
+| Transcription | [src/transcription/](src/transcription/) | `whisper.py` (faster-whisper), `registry.py` (model registry), `device.py` (CUDA detection). |
+| Audio | [src/audio/](src/audio/) | `recorder.py` (sounddevice). |
 | Input | [src/input/](src/input/) | `hotkey.py` (pynput global hotkey), `paster.py` (paste-at-cursor + clipboard). |
 | Paths | [src/paths.py](src/paths.py) | dev-vs-frozen asset resolution + user data/cache dirs. |
 | Back-end server | [sidecar.py](sidecar.py) | `SidecarServer` (WebSocket + RPC) and `HeadlessBridge` (UIBridge → events). |
@@ -136,11 +134,8 @@ coupling and the back end imports no UI framework.
 Models live in a registry ([src/transcription/registry.py](src/transcription/registry.py))
 mapping a stable id to a display name, backend, and load argument:
 
-- **Whisper** (default): `whisper-tiny`, `whisper-base`, `whisper-small` via
-  faster-whisper. Auto-selects CUDA float16 when available, else CPU int8.
-- **Parakeet** (opt-in, disabled by default): NVIDIA Parakeet via ONNX Runtime.
-  Wired end-to-end but commented out in the registry; enabling is a few-line
-  change documented in `registry.py`.
+- **Whisper**: `whisper-base`, `whisper-small` via faster-whisper.
+  Auto-selects CUDA float16 when available, else CPU int8.
 
 All Whisper sizes are warmed in the background at startup so Activity-tab retries
 with a different model are instant.
@@ -172,15 +167,10 @@ build and runtime troubleshooting.
 ## Security Model
 
 - **Audio is session-only** — held in RAM, never written to disk, cleared on exit.
-- **Prompt-injection isolation** — grammar-cleanup instructions go in Ollama's
-  `system` field; transcribed text is the bare `prompt`, so user content can't be
-  interpreted as instructions. Input is length-capped.
-- **Config validation** — all values whitelist-validated; `ollama_host` checked
-  with `urlparse`; config file created `0o600`.
+- **Config validation** — all values whitelist-validated; config file created `0o600`.
 - **Clipboard hygiene** — clipboard cleared after paste; clearing is guaranteed
   even if paste raises.
-- **Pinned model versions** — Silero VAD is pinned to a specific release.
 - **Electron hardening** — context isolation, no node integration, all web
   permissions denied except clipboard.
-- **Local only** — Ollama traffic stays on localhost; no telemetry; the app and
-  installer run without admin.
+- **Local only** — no network traffic except local model downloads; no telemetry;
+  the app and installer run without admin.

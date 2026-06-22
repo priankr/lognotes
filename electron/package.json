@@ -1,7 +1,7 @@
 {
   "name": "lognotes-electron",
   "version": "0.1.0",
-  "description": "LogNotes — local speech-to-text dictation: push-to-talk, Whisper transcription, optional grammar cleanup, paste at cursor.",
+  "description": "LogNotes — local speech-to-text dictation: push-to-talk, Whisper transcription, paste at cursor.",
   "author": "LogNotes",
   "main": "main.js",
   "scripts": {
@@ -17,6 +17,7 @@
   "build": {
     "appId": "com.lognotes.app",
     "productName": "LogNotes",
+    "compression": "store",
     "directories": {
       "output": "../dist-electron"
     },

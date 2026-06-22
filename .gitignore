@@ -54,6 +54,9 @@ archive/
 documentation/implementations/
 CLAUDE.local.md
 
+# Claude Code local memory (machine-specific, not shared)
+memory/
+
 # OS files
 .DS_Store
 Thumbs.db

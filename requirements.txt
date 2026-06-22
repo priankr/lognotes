@@ -6,10 +6,9 @@ torch>=2.0.0
 torchaudio>=2.0.0
 pynput>=1.7.6
 pyperclip>=1.8.2
-ollama>=0.1.0
 ttkbootstrap>=1.20.0
 pillow>=10.0.0
 websockets>=12.0
-# Optional: NVIDIA Parakeet support via ONNX Runtime. Uncomment + enable the
-# matching entry in src/transcription/registry.py to use Parakeet models.
-# onnx-asr[hub]>=0.6.0
+# Use the OS cert store for TLS (works behind corporate SSL inspection); the
+# entry points call truststore.inject_into_ssl() before any network import.
+truststore>=0.9.0

@@ -48,7 +48,6 @@ class TestLoadSaveRoundTrip(ConfigTestBase):
     def test_save_then_load_preserves_values(self):
         data = dict(app_config.DEFAULT_CONFIG)
         data["hotkey"] = "ctrl+alt+r"
-        data["enable_grammar"] = False
         data["theme"] = "light"
         data["overlay_corner"] = "top-left"
 
@@ -57,7 +56,6 @@ class TestLoadSaveRoundTrip(ConfigTestBase):
 
         reloaded = app_config.load_config()
         self.assertEqual(reloaded["hotkey"], "ctrl+alt+r")
-        self.assertEqual(reloaded["enable_grammar"], False)
         self.assertEqual(reloaded["theme"], "light")
         self.assertEqual(reloaded["overlay_corner"], "top-left")
 
@@ -85,9 +83,6 @@ class TestValidation(ConfigTestBase):
         garbage = {
             "whisper_model": "bogus-model",
             "hotkey": "justakey",          # no modifier
-            "enable_grammar": "yes",        # not a bool
-            "ollama_host": "https://",      # empty netloc
-            "ollama_model": "",             # empty
             "theme": "purple",
             "push_to_talk_mode": "wat",
             "overlay_corner": "middle",
@@ -98,22 +93,11 @@ class TestValidation(ConfigTestBase):
         good = {
             "whisper_model": "whisper-base",
             "hotkey": "ctrl+alt+r",
-            "enable_grammar": False,
-            "ollama_model": "llama3.2:1b",
-            "ollama_host": "http://localhost:11434",
             "theme": "light",
             "push_to_talk_mode": "toggle",
             "overlay_corner": "top-left",
         }
         self.assertEqual(app_config.validate_config(good), good)
-
-    def test_invalid_ollama_host_scheme_rejected(self):
-        cfg = dict(app_config.DEFAULT_CONFIG)
-        cfg["ollama_host"] = "ftp://example.com"
-        self.assertEqual(
-            app_config.validate_config(cfg)["ollama_host"],
-            app_config.DEFAULT_CONFIG["ollama_host"],
-        )
 
     def test_hotkey_requires_modifier_and_single_key(self):
         cfg = dict(app_config.DEFAULT_CONFIG)
@@ -135,9 +119,6 @@ class TestValidateValue(ConfigTestBase):
         cases = [
             ("whisper_model", "whisper-base", "whisper-base"),
             ("hotkey", "ctrl+alt+r", "ctrl+alt+r"),
-            ("enable_grammar", False, False),
-            ("ollama_host", "http://localhost:11434", "http://localhost:11434"),
-            ("ollama_model", "llama3.2:1b", "llama3.2:1b"),
             ("theme", "light", "light"),
             ("push_to_talk_mode", "toggle", "toggle"),
             ("overlay_corner", "top-left", "top-left"),
@@ -152,10 +133,6 @@ class TestValidateValue(ConfigTestBase):
             ("whisper_model", "bogus"),
             ("hotkey", "justakey"),          # no modifier
             ("hotkey", "ctrl+shift"),         # no main key
-            ("enable_grammar", "yes"),        # not a bool
-            ("ollama_host", "ftp://x"),       # bad scheme
-            ("ollama_host", "https://"),      # empty netloc
-            ("ollama_model", "bad model!"),   # illegal chars
             ("theme", "purple"),
             ("push_to_talk_mode", "wat"),
             ("overlay_corner", "middle"),

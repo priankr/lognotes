@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-Backend = Literal["whisper", "parakeet"]
+Backend = Literal["whisper"]
 
 
 @dataclass(frozen=True)
@@ -20,41 +20,31 @@ class ModelSpec:
     id: str
     display: str
     backend: Backend
-    backend_arg: str  # size string for whisper, HF repo id for parakeet
+    backend_arg: str  # Whisper size string (e.g. "base")
 
 
 MODELS: tuple[ModelSpec, ...] = (
-    ModelSpec("whisper-tiny",  "Whisper tiny",  "whisper",  "tiny"),
     ModelSpec("whisper-base",  "Whisper base",  "whisper",  "base"),
     ModelSpec("whisper-small", "Whisper small", "whisper",  "small"),
-    # Parakeet support is wired end-to-end (backend, device detection, PyInstaller
-    # hooks) but disabled by default — in testing it offered no quality advantage
-    # over Whisper small and carried a ~1.2 GB download. To enable:
-    #   1. Uncomment the line below.
-    #   2. Uncomment `onnx-asr[hub]` in requirements.txt and `pip install` it.
-    #   3. (Packaged builds only) add "onnxruntime", "onnx_asr" to _BUNDLE_PKGS
-    #      in build/LogNotes.spec (and build/LogNotes-tk.spec for the Tk build)
-    #      and rebuild.
-    # Other onnx-asr models also work here — supported ids include
-    # nemo-parakeet-tdt-0.6b-v2/v3 and nemo-canary-*; see parakeet.py for the
-    # backend_arg → onnx-asr id mapping.
-    # ModelSpec("parakeet-v3", "Parakeet 0.6B v3 (multilingual)", "parakeet", "nvidia/parakeet-tdt-0.6b-v3"),
 )
 
 _BY_ID = {m.id: m for m in MODELS}
 _BY_DISPLAY = {m.display: m for m in MODELS}
 
-# Legacy aliases used before the registry existed or before ONNX Parakeet.
+# Legacy aliases for model ids that no longer have a registry entry, so stored
+# configs from older versions still resolve instead of erroring.
 _LEGACY_ALIASES = {
-    "tiny": "whisper-tiny",
+    # Whisper tiny was removed (quality too low to be useful) — migrate any
+    # stored tiny reference to base, the new smallest tier.
+    "tiny": "whisper-base",
+    "whisper-tiny": "whisper-base",
     "base": "whisper-base",
     "small": "whisper-small",
     "medium": "whisper-base",  # medium/large were never in the dropdown; fall back
     "large": "whisper-base",
-    # Parakeet was disabled by default after evaluation — migrate any stored
-    # Parakeet ids to Whisper small (closest quality tier). If a user has
-    # re-enabled the registry entry below, normalize_id() sees "parakeet-v3"
-    # directly and these aliases are not hit.
+    # Parakeet was evaluated and removed (no quality gain over Whisper small,
+    # plus large download + Windows symlink/SSL friction). Migrate any stored
+    # Parakeet ids to the closest Whisper tier.
     "parakeet-110m": "whisper-small",
     "parakeet-0.6b": "whisper-small",
     "parakeet-v3": "whisper-small",

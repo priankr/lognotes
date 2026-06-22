@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """LogNotes headless sidecar.
 
-Runs the full capture pipeline (hotkey -> recorder -> VAD -> ASR -> grammar ->
-paste) with no UI, exposing a small JSON-over-WebSocket API on loopback so an
+Runs the full capture pipeline (hotkey -> recorder -> Whisper -> paste) with no
+UI, exposing a small JSON-over-WebSocket API on loopback so an
 Electron front end can drive it and receive pushed status/activity events.
 
 This is the back-end half of the Electron migration. The Tk app (main.py) is
@@ -24,6 +24,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from collections import deque
 from typing import Any, Optional
 
@@ -43,6 +44,22 @@ from src.paths import user_cache_dir
 _cache = user_cache_dir()
 os.environ.setdefault("HF_HOME", str(_cache / "hf"))
 os.environ.setdefault("TORCH_HOME", str(_cache / "torch"))
+# huggingface_hub defaults to symlinking blobs into the snapshot dir, which on
+# Windows needs Developer Mode or admin (else WinError 1314). Force copies so
+# any HuggingFace model download works on a standard user account.
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+# Use the OS certificate store (Windows) for TLS so model downloads work behind
+# corporate SSL-inspection proxies, whose CA is trusted by the OS but not by
+# certifi's bundle. Must run before requests/huggingface_hub import. Best-effort:
+# a stock network is unaffected, and a failure here must not block startup.
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except Exception:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +82,6 @@ def _entry_to_dict(entry: ActivityEntry) -> dict:
         "timestamp": entry.timestamp.isoformat(),
         "text": entry.text,
         "whisper_model": entry.whisper_model,
-        "grammar_applied": entry.grammar_applied,
         "paste_succeeded": entry.paste_succeeded,
         "error": entry.error,
         "duration_seconds": round(entry.duration_seconds, 2),
@@ -310,7 +326,6 @@ class SidecarServer:
                 audio=np.zeros(int(16000 * float(params.get("seconds", 1.0))), dtype="float32"),
                 text=params.get("text", "test transcription"),
                 whisper_model=params.get("model", "whisper-base"),
-                grammar_applied=False,
                 paste_succeeded=True,
             )
             return {"id": entry.id}
@@ -327,8 +342,6 @@ class SidecarServer:
             self._controller._on_hotkey_changed(value)
         elif key == "whisper_model":
             self._controller._on_model_changed(value)
-        elif key == "enable_grammar":
-            self._controller._on_grammar_toggled(bool(value))
 
     # ----------------------------- broadcast ----------------------------- #
 
@@ -373,6 +386,63 @@ class SidecarServer:
         self._controller.shutdown()
 
 
+def _start_parent_watchdog() -> None:
+    """Exit the sidecar if the parent (Electron) process disappears.
+
+    The Electron main process kills the sidecar on every graceful exit path, but
+    if it is *hard*-killed (Task Manager, OS, crash) no JS handler runs and the
+    sidecar would be orphaned — holding its WebSocket port and breaking the next
+    launch's handshake. This watchdog polls the parent PID and self-terminates
+    when it is gone, guaranteeing no orphan regardless of how the parent dies.
+
+    Activated only when LOGNOTES_PARENT_PID is set (i.e. spawned by Electron);
+    a headless `python sidecar.py` run is unaffected.
+    """
+    raw = os.environ.get("LOGNOTES_PARENT_PID")
+    if not raw:
+        return
+    try:
+        parent_pid = int(raw)
+    except ValueError:
+        return
+
+    def _alive(pid: int) -> bool:
+        if sys.platform == "win32":
+            # os.kill(pid, 0) is unreliable on Windows; query the process list.
+            import ctypes
+
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            STILL_ACTIVE = 259
+            h = ctypes.windll.kernel32.OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+            )
+            if not h:
+                return False
+            try:
+                code = ctypes.c_ulong()
+                if not ctypes.windll.kernel32.GetExitCodeProcess(h, ctypes.byref(code)):
+                    return False
+                return code.value == STILL_ACTIVE
+            finally:
+                ctypes.windll.kernel32.CloseHandle(h)
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+    def _watch() -> None:
+        while True:
+            time.sleep(2.0)
+            if not _alive(parent_pid):
+                logging.getLogger(__name__).info(
+                    "Parent process %s gone — sidecar exiting.", parent_pid
+                )
+                os._exit(0)
+
+    threading.Thread(target=_watch, daemon=True).start()
+
+
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -382,6 +452,8 @@ def main() -> None:
 
     host = os.environ.get("LOGNOTES_SIDECAR_HOST", "127.0.0.1")
     port = int(os.environ.get("LOGNOTES_SIDECAR_PORT", "0"))
+
+    _start_parent_watchdog()
 
     server = SidecarServer(host=host, port=port)
     try:

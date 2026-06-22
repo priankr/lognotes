@@ -36,13 +36,11 @@ binaries = []
 hiddenimports = [
     "sounddevice",
     "sounddevice._sounddevice",
-    "silero_vad",
     "ttkbootstrap",
     "websockets",
 ]
 
 # Collect everything for native-DLL-heavy deps. Saves hours of whack-a-mole.
-# To enable Parakeet support, add "onnxruntime", "onnx_asr" here and rebuild.
 _BUNDLE_PKGS = (
     "sounddevice", "faster_whisper", "ctranslate2", "torch", "torchaudio",
 )
