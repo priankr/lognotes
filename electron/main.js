@@ -184,14 +184,13 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  // Closing the window hides to tray instead of quitting, so the global hotkey
-  // keeps working in the background (matches the Tk app). Quit is explicit via
-  // the tray menu.
-  mainWindow.on('close', (e) => {
-    if (!isQuitting) {
-      e.preventDefault();
-      mainWindow.hide();
-    }
+  // Closing the window quits the whole app (window, overlay, and the Python
+  // sidecar). Users who want LogNotes to keep running in the background minimize
+  // instead — minimizing never fires 'close'. Setting isQuitting lets the close
+  // proceed and drives before-quit/will-quit, which tear down the sidecar.
+  mainWindow.on('close', () => {
+    isQuitting = true;
+    app.quit();
   });
 
   mainWindow.on('closed', () => {

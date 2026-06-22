@@ -86,7 +86,7 @@ The controller is front-end-agnostic: it talks to the UI only through an injecte
 - **Two independent renderers.** The main window and the overlay each open their own WebSocket. The overlay shows only the short state label (Ready / Recording / Processing); verbose detail stays in the main window's status box.
 - **Responsive startup.** The main window is shown immediately on launch (before the back end finishes starting), so a slow first launch doesn't look frozen; the renderer polls for the back-end port until it's up.
 - **Single instance.** `requestSingleInstanceLock()` + a `second-instance` handler surface the existing window instead of spawning a duplicate. `setAppUserModelId` ties the window + pinned taskbar shortcut to the app identity on Windows.
-- **Hide to tray.** Closing the window hides it to the tray so the global hotkey keeps working; Quit (tray menu) stops the back end — no orphaned process.
+- **Close Quits, Minimize Backgrounds.** Closing the main window quits the whole app — window, overlay, and the Python back end — so nothing is orphaned (the sidecar's tree is killed on every exit path and a parent-watchdog covers a hard kill). To keep the global hotkey working in the background, minimize instead of closing; the tray's Show/Quit still work.
 - **Hardening.** `contextIsolation: true`, `nodeIntegration: false`, a typed preload bridge, and a permission handler that denies all web permissions except clipboard.
 
 ## Transcription Backends

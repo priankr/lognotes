@@ -26,7 +26,7 @@ import logging
 import threading
 import time
 from collections import deque
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 # Same --noconsole stdout/stderr guards as main.py: libraries (torch.hub, tqdm)
 # call sys.stdout.write() and crash if it is None under a windowed frozen build.
@@ -386,7 +386,7 @@ class SidecarServer:
         self._controller.shutdown()
 
 
-def _start_parent_watchdog() -> None:
+def _start_parent_watchdog(on_orphan: Optional[Callable[[], None]] = None) -> None:
     """Exit the sidecar if the parent (Electron) process disappears.
 
     The Electron main process kills the sidecar on every graceful exit path, but
@@ -436,8 +436,20 @@ def _start_parent_watchdog() -> None:
             time.sleep(2.0)
             if not _alive(parent_pid):
                 logging.getLogger(__name__).info(
-                    "Parent process %s gone — sidecar exiting.", parent_pid
+                    "Parent process %s gone — sidecar (pid %s) exiting via watchdog.",
+                    parent_pid,
+                    os.getpid(),
                 )
+                # os._exit skips the `finally: server.shutdown()` in main(), so
+                # release the audio device here — otherwise an orphaned sidecar
+                # leaves the microphone open until the process is force-killed.
+                if on_orphan is not None:
+                    try:
+                        on_orphan()
+                    except Exception:
+                        logging.getLogger(__name__).exception(
+                            "Error during watchdog shutdown; exiting anyway."
+                        )
                 os._exit(0)
 
     threading.Thread(target=_watch, daemon=True).start()
@@ -453,9 +465,8 @@ def main() -> None:
     host = os.environ.get("LOGNOTES_SIDECAR_HOST", "127.0.0.1")
     port = int(os.environ.get("LOGNOTES_SIDECAR_PORT", "0"))
 
-    _start_parent_watchdog()
-
     server = SidecarServer(host=host, port=port)
+    _start_parent_watchdog(on_orphan=server.shutdown)
     try:
         asyncio.run(server.serve())
     except KeyboardInterrupt:
