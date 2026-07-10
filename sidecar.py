@@ -197,7 +197,16 @@ class SidecarServer:
         else:
             logger.info("Runtime start skipped (LOGNOTES_SIDECAR_NO_RUNTIME=1)")
 
-        async with websockets.serve(self._handle_client, self._host, self._port) as server:
+        # Keepalive: a live-but-idle dictation session sends no traffic for long
+        # stretches, and an unpinged WebSocket can be silently dropped by the OS
+        # or the library's own idle handling, leaving the UI stuck on
+        # "Disconnected". An explicit ping keeps the connection warm and detects a
+        # genuinely dead peer within ping_timeout. The renderer also reconnects on
+        # close as a backstop.
+        async with websockets.serve(
+            self._handle_client, self._host, self._port,
+            ping_interval=20, ping_timeout=20,
+        ) as server:
             # Discover the actual bound port (the OS picks one when port=0) and
             # hand it to the parent process.
             bound = self._bound_port(server)
