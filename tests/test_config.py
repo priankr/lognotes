@@ -96,6 +96,7 @@ class TestValidation(ConfigTestBase):
             "theme": "light",
             "push_to_talk_mode": "toggle",
             "overlay_corner": "top-left",
+            "silence_timeout_seconds": 45,
         }
         self.assertEqual(app_config.validate_config(good), good)
 
@@ -122,6 +123,7 @@ class TestValidateValue(ConfigTestBase):
             ("theme", "light", "light"),
             ("push_to_talk_mode", "toggle", "toggle"),
             ("overlay_corner", "top-left", "top-left"),
+            ("silence_timeout_seconds", 45, 45),
         ]
         for key, value, expected in cases:
             ok, norm = app_config.validate_value(key, value)
@@ -136,10 +138,22 @@ class TestValidateValue(ConfigTestBase):
             ("theme", "purple"),
             ("push_to_talk_mode", "wat"),
             ("overlay_corner", "middle"),
+            ("silence_timeout_seconds", "abc"),
+            ("silence_timeout_seconds", None),
+            ("silence_timeout_seconds", True),  # bool is not a valid timeout
         ]
         for key, value in cases:
             ok, _ = app_config.validate_value(key, value)
             self.assertFalse(ok, f"{key}={value!r} should be rejected")
+
+    def test_silence_timeout_clamped(self):
+        # Out-of-range values are accepted but clamped to the sane window.
+        ok, norm = app_config.validate_value("silence_timeout_seconds", 5)
+        self.assertTrue(ok)
+        self.assertEqual(norm, app_config.SILENCE_TIMEOUT_MIN)
+        ok, norm = app_config.validate_value("silence_timeout_seconds", 9999)
+        self.assertTrue(ok)
+        self.assertEqual(norm, app_config.SILENCE_TIMEOUT_MAX)
 
     def test_hotkey_is_normalized(self):
         ok, norm = app_config.validate_value("hotkey", "CTRL+ALT+R")
