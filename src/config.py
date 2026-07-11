@@ -32,7 +32,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "theme": "dark",
     "push_to_talk_mode": "hold",
     "overlay_corner": "bottom-right",
+    "silence_timeout_seconds": 60,
 }
+
+# Auto-stop (toggle mode) silence window, in seconds. Clamped to a sane range so
+# a bad config can't disable the feature outright or trip it near-instantly.
+SILENCE_TIMEOUT_MIN = 10
+SILENCE_TIMEOUT_MAX = 300
 
 # Security: whitelist of allowed values.
 ALLOWED_WHISPER_MODELS = set(_all_model_ids())
@@ -78,6 +84,14 @@ def validate_config(config: dict) -> dict:
     if config.get("overlay_corner") in ALLOWED_CORNERS:
         validated["overlay_corner"] = config["overlay_corner"]
 
+    is_valid, normalized_timeout = _v_silence_timeout(config.get("silence_timeout_seconds"))
+    if is_valid:
+        validated["silence_timeout_seconds"] = normalized_timeout
+    elif config.get("silence_timeout_seconds") is not None:
+        logger.warning(
+            f"Invalid silence_timeout_seconds '{config.get('silence_timeout_seconds')}', using default"
+        )
+
     return validated
 
 
@@ -118,12 +132,26 @@ def _v_overlay_corner(value: Any) -> tuple[bool, Any]:
     return value in ALLOWED_CORNERS, value
 
 
+def _v_silence_timeout(value: Any) -> tuple[bool, Any]:
+    # Accept ints (and int-valued floats/strings) and clamp into range. bool is
+    # an int subclass but is not a valid timeout, so reject it explicitly.
+    if isinstance(value, bool):
+        return False, value
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        return False, value
+    clamped = max(SILENCE_TIMEOUT_MIN, min(SILENCE_TIMEOUT_MAX, seconds))
+    return True, clamped
+
+
 _KEY_VALIDATORS = {
     "whisper_model": _v_whisper_model,
     "hotkey": _v_hotkey,
     "theme": _v_theme,
     "push_to_talk_mode": _v_ptt_mode,
     "overlay_corner": _v_overlay_corner,
+    "silence_timeout_seconds": _v_silence_timeout,
 }
 
 

@@ -59,6 +59,12 @@ class LogNotesController:
         self._processing_lock = threading.Lock()
         self._is_processing = False
 
+        # Silence auto-stop (toggle mode): a watcher thread polls the recorder's
+        # time-since-voice and stops a forgotten recording once it exceeds the
+        # configured window. Signalled to exit via the event on a manual stop.
+        self._silence_stop = threading.Event()
+        self._silence_thread: Optional[threading.Thread] = None
+
     def _handle_audio_backend_error(self, error: Exception) -> None:
         """Report a missing or broken audio backend without crashing the app."""
         message = str(error)
@@ -175,6 +181,7 @@ class LogNotesController:
                 else:
                     self._ui.set_status("recording", "Recording...")
                     self._recorder.start()
+                    self._start_silence_watcher()
             else:
                 self._ui.set_status("recording", "Recording...")
                 self._recorder.start()
@@ -199,8 +206,44 @@ class LogNotesController:
 
         self._stop_and_process()
 
+    SILENCE_POLL_SEC = 0.5
+
+    def _start_silence_watcher(self) -> None:
+        """Start the toggle-mode auto-stop watcher for the current recording.
+
+        Polls the recorder's time-since-voice and triggers a normal stop once it
+        exceeds the configured window, so a forgotten toggle-mode recording ends
+        (and still transcribes what was said) instead of running forever.
+        """
+        self._stop_silence_watcher()  # ensure no stale watcher survives
+        timeout = self._config.get("silence_timeout_seconds", 60)
+
+        self._silence_stop.clear()
+        stop_event = self._silence_stop
+
+        def _watch():
+            while not stop_event.wait(self.SILENCE_POLL_SEC):
+                if not self._recorder.is_recording:
+                    return
+                if self._recorder.seconds_since_voice() >= timeout:
+                    logger.info(f"Auto-stop: {timeout}s of silence, stopping recording")
+                    self._stop_and_process()
+                    return
+
+        self._silence_thread = threading.Thread(target=_watch, daemon=True)
+        self._silence_thread.start()
+
+    def _stop_silence_watcher(self) -> None:
+        """Signal the silence watcher (if any) to exit. Non-blocking."""
+        self._silence_stop.set()
+
     def _stop_and_process(self):
         """Stop recording and kick off audio processing."""
+        # Stop the auto-stop watcher first: whether the user or the watcher
+        # itself triggered this, the recording is ending and the poll loop
+        # should not fire again.
+        self._stop_silence_watcher()
+
         if not self._recorder.is_recording:
             return
 
@@ -544,6 +587,7 @@ class LogNotesController:
     def shutdown(self) -> None:
         """Stop the hotkey listener and release the audio device."""
         self._cancel_status_revert()
+        self._stop_silence_watcher()
         if self._hotkey is not None:
             self._hotkey.stop()
         self._recorder.close()

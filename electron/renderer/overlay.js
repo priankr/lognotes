@@ -18,6 +18,14 @@ const LABELS = {
 const CORNERS = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
 let currentCorner = 'bottom-right';
 
+// Reconnect state, mirroring renderer.js: the overlay's WebSocket can close
+// while the sidecar is still alive, so retry with backoff. sidecarDown (set by
+// onSidecarDown) suppresses retries once the back end has actually exited.
+let sidecarDown = false;
+let reconnectDelay = 0;
+const RECONNECT_MIN_MS = 1000;
+const RECONNECT_MAX_MS = 10000;
+
 function request(method, params = {}) {
   return new Promise((resolve, reject) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -89,6 +97,7 @@ async function connect() {
   }
   ws = new WebSocket(`ws://127.0.0.1:${port}`);
   ws.onopen = async () => {
+    reconnectDelay = 0; // reset backoff on a successful connection
     try {
       const cfg = await request('getConfig');
       if (cfg && cfg.overlay_corner) {
@@ -100,8 +109,30 @@ async function connect() {
   ws.onmessage = (ev) => {
     try { handle(JSON.parse(ev.data)); } catch { /* ignore */ }
   };
-  ws.onclose = () => setState('error');
+  ws.onclose = () => {
+    setState('error');
+    scheduleReconnect();
+  };
 }
 
-window.lognotes.onSidecarDown(() => setState('error'));
+// Retry after a close with geometric backoff, unless the sidecar has actually
+// exited. Rejects in-flight requests so their callers don't hang.
+function scheduleReconnect() {
+  for (const { reject } of pending.values()) reject(new Error('disconnected'));
+  pending.clear();
+
+  if (sidecarDown) return;
+
+  reconnectDelay = reconnectDelay
+    ? Math.min(reconnectDelay * 2, RECONNECT_MAX_MS)
+    : RECONNECT_MIN_MS;
+  setTimeout(() => {
+    if (!sidecarDown) connect();
+  }, reconnectDelay);
+}
+
+window.lognotes.onSidecarDown(() => {
+  sidecarDown = true;
+  setState('error');
+});
 connect();

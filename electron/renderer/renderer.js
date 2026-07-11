@@ -27,6 +27,16 @@ let ws = null;
 let nextId = 1;
 const pending = new Map();
 
+// Reconnect state. The WebSocket can close while the sidecar is still alive
+// (idle drop, transient network hiccup); when that happens we retry with
+// backoff so the disconnect is self-healing. A real sidecar exit fires
+// onSidecarDown, which sets sidecarDown to suppress pointless retries against a
+// process that is gone.
+let sidecarDown = false;
+let reconnectDelay = 0;
+const RECONNECT_MIN_MS = 1000;
+const RECONNECT_MAX_MS = 10000;
+
 // Guard so programmatic value-setting during load doesn't fire change handlers
 // that would echo back to the sidecar.
 let loadingConfig = false;
@@ -524,6 +534,7 @@ async function connect() {
 
   ws.onopen = async () => {
     els.conn.textContent = 'connected';
+    reconnectDelay = 0; // reset backoff on a successful connection
     window.lognotes.signalReady();
     try {
       await loadSettings();
@@ -542,7 +553,7 @@ async function connect() {
 
   ws.onclose = () => {
     els.conn.textContent = 'closed';
-    setStatus('error', 'Disconnected', 'Lost connection to the sidecar.');
+    scheduleReconnect();
   };
 
   ws.onerror = () => {
@@ -550,7 +561,28 @@ async function connect() {
   };
 }
 
+// Retry the connection after a close, backing off geometrically up to a cap. A
+// real sidecar exit (sidecarDown) skips this — there is nothing to reconnect to
+// until it is respawned. Rejects any in-flight requests so their callers see the
+// disconnect rather than hanging on a promise that can never resolve.
+function scheduleReconnect() {
+  for (const { reject } of pending.values()) reject(new Error('disconnected'));
+  pending.clear();
+
+  if (sidecarDown) return;
+
+  reconnectDelay = reconnectDelay
+    ? Math.min(reconnectDelay * 2, RECONNECT_MAX_MS)
+    : RECONNECT_MIN_MS;
+  setStatus('error', 'Reconnecting…', 'Lost connection to the sidecar.');
+  setTimeout(() => {
+    if (sidecarDown) return;
+    connect().catch((e) => setStatus('error', 'Connection failed', e.message));
+  }, reconnectDelay);
+}
+
 window.lognotes.onSidecarDown(() => {
+  sidecarDown = true;
   setStatus('error', 'Sidecar stopped', 'The back-end process exited.');
   els.conn.textContent = 'down';
 });

@@ -1,4 +1,5 @@
 import logging
+import time
 import numpy as np
 import threading
 from queue import Empty, Queue
@@ -26,12 +27,22 @@ class AudioRecorder:
     DTYPE = np.float32
     BLOCK_SIZE = 1024  # Samples per block
 
+    # RMS amplitude below which a block counts as silence, for the auto-stop
+    # timer. float32 mic input is normalized to [-1, 1]; normal speech sits well
+    # above this and room tone / breath noise below it. A rough energy gate is
+    # all the auto-stop needs — it doesn't have to be a real VAD.
+    SILENCE_RMS_THRESHOLD = 0.01
+
     def __init__(self):
         self._audio_queue: Queue = Queue()
         self._is_recording: bool = False
         self._stream: Optional[Any] = None
         self._lock = threading.Lock()
         self._availability_error: Optional[str] = None
+        # Monotonic timestamp of the last block that carried voice. Seeded on
+        # start() so a slow-to-begin speaker gets the full silence window before
+        # the first check. Read by seconds_since_voice() for the auto-stop timer.
+        self._last_voice_time: float = 0.0
 
         if sd is None:
             details = str(_SOUNDDEVICE_IMPORT_ERROR) if _SOUNDDEVICE_IMPORT_ERROR else "unknown error"
@@ -51,6 +62,11 @@ class AudioRecorder:
             logger.warning(f"Audio stream status: {status}")
         if self._is_recording:
             self._audio_queue.put(indata.copy())
+            # Track voice activity for the silence auto-stop timer. A cheap RMS
+            # gate is enough here and keeps the callback fast.
+            rms = float(np.sqrt(np.mean(np.square(indata))))
+            if rms >= self.SILENCE_RMS_THRESHOLD:
+                self._last_voice_time = time.monotonic()
 
     def start(self) -> None:
         """Start recording audio from the microphone."""
@@ -66,6 +82,9 @@ class AudioRecorder:
                 except Empty:
                     break
 
+            # Seed to now so the auto-stop timer measures silence from the start
+            # of this recording, giving the user the full window to begin.
+            self._last_voice_time = time.monotonic()
             self._is_recording = True
             if self._stream is None:
                 self._stream = sd.InputStream(
@@ -122,6 +141,14 @@ class AudioRecorder:
     def is_recording(self) -> bool:
         """Check if currently recording."""
         return self._is_recording
+
+    def seconds_since_voice(self) -> float:
+        """Seconds since the last block that carried voice, for the auto-stop timer.
+
+        Measured from the start of the current recording if no voice has been
+        seen yet (start() seeds the timestamp).
+        """
+        return time.monotonic() - self._last_voice_time
 
     @property
     def is_available(self) -> bool:
